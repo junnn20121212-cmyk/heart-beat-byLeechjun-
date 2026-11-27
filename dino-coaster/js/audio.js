@@ -246,6 +246,39 @@ export class AudioEngine {
     nz.start(t0); nz.stop(t0 + 1.7);
   }
 
+  // heavy body-on-steel impact: crunch, boom and rattling metal
+  crash(pos, gain = 1) {
+    if (!this.ctx) return;
+    const ctx = this.ctx, t0 = ctx.currentTime;
+    const out = ctx.createGain(); out.gain.value = 0;
+    out.connect(this.master);
+    const nz = ctx.createBufferSource(); nz.buffer = this.white;
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(3500, t0); lp.frequency.exponentialRampToValueAtTime(180, t0 + 0.6);
+    nz.connect(lp); lp.connect(out);
+    out.gain.linearRampToValueAtTime(1.1 * gain, t0 + 0.01);
+    out.gain.exponentialRampToValueAtTime(0.001, t0 + 0.9);
+    nz.start(t0, Math.random()); nz.stop(t0 + 1);
+    // deep boom
+    const o = ctx.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(95, t0); o.frequency.exponentialRampToValueAtTime(28, t0 + 0.5);
+    const og = ctx.createGain(); og.gain.value = 0;
+    og.gain.linearRampToValueAtTime(1.4 * gain, t0 + 0.01); og.gain.exponentialRampToValueAtTime(0.001, t0 + 0.7);
+    o.connect(og); og.connect(this.master);
+    o.start(t0); o.stop(t0 + 0.75);
+    // metal rattle
+    for (let k = 0; k < 7; k++) {
+      const m = ctx.createOscillator(); m.type = 'square';
+      const t = t0 + 0.04 + k * 0.06 + Math.random() * 0.03;
+      m.frequency.setValueAtTime(300 + Math.random() * 700, t);
+      const mg = ctx.createGain(); mg.gain.value = 0;
+      mg.gain.setValueAtTime(0.12 * gain * (1 - k / 8), t); mg.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+      const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1800; bp.Q.value = 3;
+      m.connect(bp); bp.connect(mg); mg.connect(this.master);
+      m.start(t); m.stop(t + 0.1);
+    }
+  }
+
   // passenger scream: sung vowel with formants, vibrato and breath
   scream(pos, { pitch = 1, dur = 1.6, gain = 0.45, rise = 1.25 } = {}) {
     if (!this.ctx) return;

@@ -458,6 +458,8 @@ function loop(now) {
       app.vRel += 9.81 * Math.max(0.15, -smp.t.y) * dt;
       if (app.vRel >= v) app.holdPhase = 'done'; else v = app.vRel;
     }
+    // impact jolt: the hit knocks speed off for a moment
+    if (app.fx.slow > 0) { app.fx.slow -= dt; v *= 0.72 + 0.28 * (1 - Math.max(0, app.fx.slow) / 0.55); }
     // launch kick
     if (smp.zone === 4 && !app.launched) { app.launched = true; audio.launch(); app.fx.shake = Math.max(app.fx.shake, 0.5); app.fovKick = 10; buzz([300, 60, 500], true); screamT = 0; screams(3, { rise: 1.5 }); }
     const remain = track.length - app.dist;
@@ -511,7 +513,7 @@ function loop(now) {
     app.fx.vig = (app.fx.vig || 0) + (want - (app.fx.vig || 0)) * Math.min(1, dt * 4);
     $('gvig').style.opacity = app.mode === 'normal' ? app.fx.vig.toFixed(3) : 0;
   }
-  const sh = base + app.fx.shake * 0.05;
+  const sh = base + app.fx.shake * (app.mode === 'vr' ? 0.035 : 0.06);
   tmpE.set(Math.sin(time * 41) * sh + Math.sin(time * 23.7) * sh * 0.6, Math.sin(time * 37.3) * sh * 0.7, Math.sin(time * 29.1) * sh * 0.5);
   shakeQ.setFromEuler(tmpE);
   // head inertia: the body lags behind every push of the cart
@@ -519,10 +521,13 @@ function loop(now) {
   if (app.fx.kick) {
     // a side impact (triceratops) shoves the cart and snaps the head sideways
     const k = app.fx.kick * (app.mode === 'vr' ? 0.6 : 1);
-    inertia.vel.x += k * 1.1; inertia.rot.vr += k * 2.2; inertia.vel.y += 0.35;
+    inertia.vel.x += k * 1.3; inertia.rot.vr += k * 3.2; inertia.vel.y += 0.5; inertia.rot.vp -= Math.abs(k) * 0.8;
     app.fx.kick = 0;
   }
-  tmpE.set(inertia.rot.pitch, 0, inertia.rot.roll);
+  // after a heavy hit the whole cart rocks on its wheels for a moment
+  app.fx.wobble = Math.max(0, (app.fx.wobble || 0) - dt * 0.9);
+  const wb = app.fx.wobble * app.fx.wobble * (app.mode === 'vr' ? 0.6 : 1);
+  tmpE.set(inertia.rot.pitch + Math.sin(time * 11) * 0.05 * wb, Math.sin(time * 7) * 0.04 * wb, inertia.rot.roll + Math.sin(time * 13) * 0.14 * wb);
   inertiaQ.setFromEuler(tmpE);
   camera.quaternion.copy(dragQ).multiply(inertiaQ).multiply(headQ).multiply(shakeQ);
   const gv = app.state === 'ride' ? smp.gv : 1;

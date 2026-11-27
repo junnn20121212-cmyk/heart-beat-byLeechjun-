@@ -48,13 +48,27 @@ add('splash', [138, 1.3, 147]);
 add('splash2', [118, 1.3, 156]);
 add(null, [98, 3, 166]);
 add('lift2Start', [78, 7, 176]);
-add(null, [58, 15, 186]);
-add('brachio', [38, 23, 196]);
-add(null, [18, 28, 204]);
-add('lift2Top', [0, 29.5, 210]);
-add(null, [-16, 26, 214]);
-add(null, [-32, 12, 218]);
-add('trike', [-52, 6, 218]);
+add(null, [58, 19, 186]);
+add('brachio', [38, 31, 196]);
+add(null, [18, 43, 204]);
+add('lift2Top', [0, 54, 210]);
+// "Raptor Ravine": twisting 72-degree drop off a 55 m lift, 110+ km/h, then a
+// 360-degree overbanked turn that dives back underneath the lift
+add('crest2', [-11, 55, 211]);
+add(null, [-21, 50, 208.5]);
+add(null, [-28, 36, 202]);
+add(null, [-32, 20, 192]);
+add('dive2', [-33, 7, 178]);
+add(null, [-29, 4.5, 161]);
+add(null, [-17, 7, 148]);
+add(null, [1, 13, 143]);
+add('overbank', [19, 10, 149]);
+add(null, [30, 6, 163]);
+add(null, [29, 5, 181]);
+add(null, [18, 5, 197]);
+add(null, [2, 5.5, 212]);
+add(null, [-20, 5.5, 219]);
+add('trike', [-52, 6, 219]);
 add(null, [-75, 7, 212]);
 add('helixIn', [-100, 13, 205]);
 {

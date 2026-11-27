@@ -132,14 +132,14 @@ export class Director {
     // 5) BRACHIOSAURUS face-to-face on lift 2
     {
       const sAt = s('brachio') + 6;
-      this.trackPoint(sAt, 14, tmp);
+      this.trackPoint(sAt, -14, tmp);
       this.track.sample(sAt, this._s);
       const camY = this._s.p.y + 1.4;
       const bsc = clamp((camY + 4.5 - tmp.y) / 15.7, 1.0, 2.2);
       const d = this.add('brachio', bsc);
       d.place(tmp.x, tmp.y, tmp.z);
       this.track.sample(sAt, this._s);
-      d.heading = Math.atan2(-this._s.r.x, -this._s.r.z) - 0.35;
+      d.heading = Math.atan2(this._s.r.x, this._s.r.z) + 0.35;
       d.maxLook = 0.55;
       this.actors.push(this.watcher(d, sAt));
     }
@@ -690,11 +690,22 @@ export class Director {
         if (state === 'wait') {
           d.speed = 0;
           d.headDip = 0.3;
-          if (ds < 450 && ds > 0 && this.eta(sAt, st.s) < runTime + (lead ? 0.55 : 1.3)) { state = 'run'; t = 0; d._bumped = false; }
+          if (ds < 450 && ds > 0 && this.eta(sAt, st.s) < runTime + (lead ? 0.28 : 1.3)) { state = 'run'; t = 0; d._bumped = false; }
         } else if (state === 'run') {
           t += dt;
           d.headDip = 0.35; // horns down
-          this.moveToward(d, B, spd, dt, 1.2, 4);
+          if (d._stagger > 0) {
+            // knocked sideways after the hit: slows, slews away, head swinging
+            d._stagger -= dt;
+            d.speed += (4 - d.speed) * Math.min(1, dt * 3);
+            d.heading += d._staggerSide * dt * 1.1;
+            d.extraYaw = Math.sin(t * 14) * 0.25 * d._stagger;
+            d.bodyPitch = Math.sin(t * 9) * 0.08 * d._stagger;
+            d.pos.x += Math.sin(d.heading) * d.speed * dt;
+            d.pos.z += Math.cos(d.heading) * d.speed * dt;
+            d.pos.y = this.ground(d.pos.x, d.pos.z);
+            if (d._stagger <= 0) { d.extraYaw = 0; d.bodyPitch = 0; }
+          } else this.moveToward(d, B, spd, dt, 1.2, 4);
           if (lead) this.focus = d.pos;
           if (!bellowed && t > 0.2 + (lead ? 0 : Math.random() * 2)) { bellowed = true; this.audio.bellow(d.headWorld(this._h), { pitch: 1.3 / (d.scale || 1), dur: 1.5, gain: lead ? 1.0 : 0.6 }); if (lead) this.say('저 멀리서 트리케라톱스 무리가 돌진해 온다!'); d.roar(1.5); }
           if (d.pos.distanceTo(B) < 2) { state = 'done'; t = 0; }
@@ -702,14 +713,33 @@ export class Director {
           if (ph !== stepPh) { stepPh = ph; const dist = d.pos.distanceTo(st.cam); if (dist < 50) { this.audio.thump(d.pos, 0.5); this.fx.shake = Math.max(this.fx.shake, 0.15 * (1 - dist / 50)); } }
           this.particles.emitDust(d.pos, dt);
           // the stampede clips the train: heavy jolt, side shove, thud
-          if (!d._bumped && d.pos.distanceTo(st.cam) < (lead ? 9 : 7)) {
+          if (!d._bumped && d.pos.distanceTo(st.cam) < (lead ? 8 : 6)) {
             d._bumped = true;
-            const s0 = lead ? 1.0 : 0.6;
-            this.fx.shake = Math.max(this.fx.shake, s0);
-            this.fx.kick = (this.fx.kick || 0) + (lead ? 0.9 : 0.5) * (Math.random() < 0.5 ? -1 : 1);
-            this.audio.thump(d.pos, 1.6 * s0); this.audio.thump(st.cam, 1.2 * s0); this.audio.clunk();
-            try { if (navigator.vibrate) navigator.vibrate(lead ? [180, 40, 120] : [90]); } catch (e) { /* ignore */ }
-            if (lead) this.say('쾅! 트리케라톱스와 부딪혔다!');
+            // which side of the cart got hit (+1 = right, -1 = left)
+            this.track.sample(st.s, this._s);
+            const side = Math.sign((d.pos.x - st.cam.x) * this._s.r.x + (d.pos.z - st.cam.z) * this._s.r.z) || 1;
+            if (lead) {
+              // full-body ram: violent rattle, sideways shove, speed jolt, aftershock
+              this.fx.shake = Math.max(this.fx.shake, 2.2);
+              this.fx.wobble = 1;
+              this.fx.kick = (this.fx.kick || 0) + 2.4 * side;
+              this.fx.slow = 0.55;
+              this.fx.flashDust = 1;
+              setTimeout(() => { this.fx.kick = (this.fx.kick || 0) - 1.1 * side; this.fx.shake = Math.max(this.fx.shake, 1.2); this.audio.clunk(); }, 260);
+              this.audio.crash(st.cam, 1.3);
+              this.audio.bellow(d.headWorld(this._h), { pitch: 1.1, dur: 1.8, gain: 1.2 });
+              this.particles.burst(st.cam.clone().addScaledVector(this._s.r, side * 1.5).add(new THREE.Vector3(0, -1, 0)), 160, 'dust', 6);
+              for (let k = 0; k < 4; k++) this.plume(st.cam.clone().addScaledVector(this._s.r, side * (2 + k)), 3);
+              try { if (navigator.vibrate) navigator.vibrate([350, 60, 200, 60, 400]); } catch (e) { /* ignore */ }
+              this.say('쾅!!! 트리케라톱스에게 들이받혔다!');
+              // the animal bounces off and staggers away
+              d._stagger = 1.4; d._staggerSide = side;
+            } else {
+              this.fx.shake = Math.max(this.fx.shake, 0.9);
+              this.fx.kick = (this.fx.kick || 0) + 0.8 * side;
+              this.audio.crash(d.pos, 0.6);
+              try { if (navigator.vibrate) navigator.vibrate([120]); } catch (e) { /* ignore */ }
+            }
           }
           d._plumeT = (d._plumeT || 0) - dt;
           if (d._plumeT < 0) { d._plumeT = 0.22; this.plume(d.pos, 3 * (d.scale || 1)); }
