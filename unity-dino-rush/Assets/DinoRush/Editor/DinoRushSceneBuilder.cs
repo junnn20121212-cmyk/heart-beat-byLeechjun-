@@ -129,7 +129,7 @@ namespace DinoRush.EditorTools
             // Cardboard helper lives in its own folder and needs the Cardboard package
             var cbType = AppDomain.CurrentDomain.GetAssemblies().Select(a => a.GetType("DinoRush.CardboardStartup")).FirstOrDefault(t => t != null);
             if (cbType != null) mgr.AddComponent(cbType);
-            else Debug.LogWarning("DinoRush: CardboardStartup not found yet. Install the Cardboard XR Plugin (README step 3), then run Build Scene again.");
+            else Debug.Log("DinoRush: PC mode (no Cardboard helper). For a phone build, install the Cardboard plugin and switch to Android first.");
 
             // place cart at the station so the scene view shows something sensible
             cart.transform.position = new Vector3(-40, 6, 0);

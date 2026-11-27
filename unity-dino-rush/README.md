@@ -8,6 +8,17 @@
 
 ---
 
+## PC로만 탈 때 (안드로이드 없이)
+
+- **건너뛸 단계:** 3단계(카드보드 플러그인), 6단계, 7단계
+- **할 단계:** 1 → 2 → 4 → 5단계만 하면 PC에서 ▶ Play로 바로 탈 수 있어요.
+- **조작:** 마우스 오른쪽 드래그로 둘러보기, R로 정면, 스페이스로 다시 출발
+- **실행 파일(.exe)로 만들기:**
+  1. **File → Build Settings** → **Windows, Mac, Linux** 선택
+  2. Target Platform **Windows**, Architecture **x86_64** (이게 x64예요)
+  3. **Add Open Scenes** → **Build** → 폴더 선택
+  4. 만들어진 `DinoRushVR.exe` 를 실행하면 돼요.
+
 ## 준비물
 
 - 윈도우 PC (메모리 8GB 이상 권장, 저장 공간 20GB 이상)
