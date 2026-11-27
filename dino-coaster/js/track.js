@@ -488,11 +488,22 @@ export function buildCart(texSet) {
     // body shell: side profile extruded across width (x)
     const len = 2.5;
     const sh = new THREE.Shape();
+    // open seating well: tall nose/dash at the front, low floor (0.5) where the riders sit
     sh.moveTo(-len / 2, 0.22);
     sh.lineTo(len / 2 - 0.2, 0.22);
-    if (isFront) { sh.quadraticCurveTo(len / 2 + 0.35, 0.3, len / 2 + 0.25, 0.85); sh.lineTo(len / 2 - 0.15, 1.0); }
-    else { sh.lineTo(len / 2, 0.75); }
-    sh.lineTo(-len / 2 + 0.1, 0.78);
+    if (isFront) {
+      sh.quadraticCurveTo(len / 2 + 0.35, 0.3, len / 2 + 0.25, 0.85);
+      sh.lineTo(len / 2 - 0.1, 1.0);
+      sh.lineTo(len / 2 - 0.25, 0.95);
+      sh.lineTo(len / 2 - 0.3, 0.5);
+    } else {
+      sh.lineTo(len / 2, 0.85);
+      sh.lineTo(len / 2 - 0.12, 0.85);
+      sh.lineTo(len / 2 - 0.15, 0.5);
+    }
+    sh.lineTo(-len / 2 + 0.25, 0.5);
+    sh.lineTo(-len / 2 + 0.2, 0.85);
+    sh.lineTo(-len / 2, 0.82);
     sh.lineTo(-len / 2, 0.22);
     const ext = new THREE.ExtrudeGeometry(sh, { depth: 1.62, bevelEnabled: true, bevelThickness: 0.06, bevelSize: 0.05, bevelSegments: 3, curveSegments: 10 });
     ext.translate(0, 0, -0.81);
@@ -503,6 +514,18 @@ export function buildCart(texSet) {
     body.castShadow = true; body.receiveShadow = true;
     g.add(body);
 
+    // side walls of the seating well
+    for (const sx of [-0.84, 0.84]) {
+      const wall = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.42, isFront ? 1.75 : 2.0), paint);
+      wall.position.set(sx, 0.7, isFront ? 0.2 : 0.05);
+      g.add(wall);
+      const rim = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, isFront ? 1.75 : 2.0, 8), paintDark);
+      rim.rotation.x = Math.PI / 2; rim.position.set(sx, 0.92, isFront ? 0.2 : 0.05);
+      g.add(rim);
+    }
+    const floor = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.04, 2.0), new THREE.MeshStandardMaterial({ color: 0x1c1c1a, roughness: 0.9 }));
+    floor.position.set(0, 0.52, 0.05);
+    g.add(floor);
     // stripes along the sides
     const stripe = new THREE.Mesh(new THREE.BoxGeometry(1.76, 0.08, 2.3), paintDark);
     stripe.position.set(0, 0.45, 0.0);
@@ -518,13 +541,20 @@ export function buildCart(texSet) {
         back.rotation.x = -0.15;
         g.add(cushion, back);
         // lap bar (U shape)
+        // the lap bar swings on a hinge so it can lower onto the rider
+        const hinge = new THREE.Group();
+        hinge.position.set(sx, 0.8, row + 0.02);
         const bar = new THREE.Mesh(new THREE.TorusGeometry(0.24, 0.035, 8, 20, Math.PI), chrome);
         bar.rotation.x = Math.PI / 2 + 0.25;
-        bar.position.set(sx, 0.86, row - 0.3);
+        bar.position.set(0, 0.06, -0.32);
         const pad = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.44, 10), rubber);
         pad.rotation.z = Math.PI / 2;
-        pad.position.set(sx, 0.8, row - 0.52);
-        g.add(bar, pad);
+        pad.position.set(0, 0, -0.54);
+        const arm = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.56), chrome);
+        arm.position.set(0, 0.02, -0.28);
+        hinge.add(bar, pad, arm);
+        g.add(hinge);
+        (g.userData.bars = g.userData.bars || []).push(hinge);
       }
     }
     // grab handle at front cowl

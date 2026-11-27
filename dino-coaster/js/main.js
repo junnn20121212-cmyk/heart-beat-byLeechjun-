@@ -6,6 +6,7 @@ import { Director } from './encounters.js';
 import { AudioEngine } from './audio.js';
 import { StereoRenderer, Gyro } from './vr.js';
 import * as TX from './textures.js';
+import { Riders, HeadInertia } from './riders.js';
 
 const $ = id => document.getElementById(id);
 const nextFrame = () => new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)));
@@ -148,7 +149,7 @@ const app = {
   muted: false,
 };
 
-let holdS, menuCam, dust, renderer, scene, camera, track, world, director, audio, stereo, gyro, particles, carts, billboard, headlight, lapS0;
+let riders, inertia, holdS, menuCam, dust, renderer, scene, camera, track, world, director, audio, stereo, gyro, particles, carts, billboard, headlight, lapS0;
 const smp = { p: new THREE.Vector3(), t: new THREE.Vector3(), r: new THREE.Vector3(), u: new THREE.Vector3() };
 const smp2 = { p: new THREE.Vector3(), t: new THREE.Vector3(), r: new THREE.Vector3(), u: new THREE.Vector3() };
 
@@ -214,6 +215,9 @@ async function init() {
   scene.add(carts.front, carts.back);
   camera.position.set(-0.38, 1.36, -0.42);
   carts.front.add(camera);
+  riders = new Riders(carts, Q.high);
+  inertia = new HeadInertia();
+  setBars(1);
   headlight = new THREE.SpotLight(0xfff0d0, 0, 60, 0.55, 0.5, 1.2);
   headlight.position.set(0, 0.8, -1.4);
   headlight.target.position.set(0, -0.5, -20);
@@ -255,6 +259,38 @@ function placeCart(s) {
   carts.back.position.copy(smp2.p);
 }
 
+// ---------------- ride feel helpers ----------------
+const bars = () => (carts.front.userData.bars || []).concat(carts.back.userData.bars || []);
+function setBars(k) { for (const b of bars()) b.rotation.x = 1.25 * k; }
+let buzzT = 0;
+function buzz(p, force = false) {
+  if (!force && buzzT > 0) return;
+  buzzT = 0.25;
+  try { if (navigator.vibrate) navigator.vibrate(p); } catch (e) { /* ignore */ }
+}
+let screamT = 0;
+function screams(n = 3, opts = {}) {
+  if (screamT > 0 || app.muted) return;
+  screamT = 3.5;
+  const heads = riders.heads();
+  for (let i = 0; i < Math.min(n, heads.length); i++) {
+    const h = heads[Math.floor(Math.random() * heads.length)];
+    setTimeout(() => audio.scream(h, { pitch: 0.75 + Math.random() * 0.7, dur: opts.dur || 1.4 + Math.random() * 0.9, rise: opts.rise || 1.25 }), i * 140 + Math.random() * 120);
+  }
+}
+function splashDrops() {
+  if (app.mode !== 'normal') return;
+  const el = $('drops');
+  el.innerHTML = '';
+  for (let i = 0; i < 26; i++) {
+    const d = document.createElement('i');
+    const sz = 8 + Math.random() * 34;
+    d.style.cssText = `left:${Math.random() * 100}%;top:${Math.random() * 100}%;width:${sz}px;height:${sz * (1 + Math.random() * 0.4)}px`;
+    el.appendChild(d);
+  }
+  el.classList.remove('fade'); void el.offsetWidth; el.classList.add('fade');
+}
+
 // ---------------- ride control ----------------
 async function startRide(mode) {
   app.mode = mode;
@@ -283,7 +319,10 @@ async function startRide(mode) {
   app.yaw = 0; app.pitch = 0;
   app.dist = 0; app.s = lapS0; app.v = 0; app.rideT = 0;
   app.holdPhase = null; app.launched = false; app.fovKick = 0;
-  app.countdown = mode === 'vr' ? 6 : 3.5;
+  app.cdTotal = app.countdown; app.barsDown = 0; app.beeped = false; app.wasRoll = false; app.excite = 0;
+  setBars(1); inertia.reset();
+  audio.announce('다이노 러시에 오신 것을 환영합니다. 안전바를 끝까지 내려 주세요. 공룡에게 손을 흔들지 마세요. 출발합니다!');
+  app.countdown = mode === 'vr' ? 8 : 7;
   app.state = 'countdown';
   app.fx.fade = 1;
   onResize();
@@ -292,6 +331,7 @@ async function startRide(mode) {
 function endRide() {
   app.state = 'end';
   app.endT = 0;
+  setTimeout(() => { for (const b of bars()) b.rotation.x = 1.25; audio.hiss(); }, 1800);
   if (app.mode === 'normal') { $('end').hidden = false; $('hud').hidden = true; }
 }
 
@@ -370,7 +410,7 @@ function onResize() {
 }
 
 // ---------------- main loop ----------------
-const headQ = new THREE.Quaternion(), dragQ = new THREE.Quaternion(), shakeQ = new THREE.Quaternion(), tmpE = new THREE.Euler();
+const inertiaQ = new THREE.Quaternion(), headQ = new THREE.Quaternion(), dragQ = new THREE.Quaternion(), shakeQ = new THREE.Quaternion(), tmpE = new THREE.Euler();
 const camWorld = new THREE.Vector3(), fwd = new THREE.Vector3();
 const statsAcc = { t: 0, n: 0 };
 
@@ -387,8 +427,16 @@ function loop(now) {
     app.fx.fade = Math.max(0, app.fx.fade - dt * 0.8);
     const c = Math.ceil(app.countdown);
     if (app.mode === 'vr' && app.countdown > 3) billboard.set('DINO RUSH', '안전바를 내려주세요 · 곧 출발합니다');
+    else if (c > 3) billboard.set('DINO RUSH', '안전바를 내려주세요');
     else billboard.set(c > 0 ? String(c) : '출발!', c > 0 ? '꽉 잡으세요!' : '');
-    if (app.countdown <= 0) { app.state = 'ride'; app.rideT = 0; setTimeout(() => billboard.set(''), 900); }
+    const el = app.cdTotal - app.countdown;
+    // lap bars come down one by one, each with a clunk
+    const nb = bars().length;
+    const lowered = Math.min(nb, Math.floor((el - 1.6) / 0.25) + 1);
+    while (app.barsDown < lowered && app.barsDown < nb) { audio.clunk(); if (app.barsDown === 0) buzz(40, true); app.barsDown++; }
+    bars().forEach((b, i) => { const t = THREE.MathUtils.clamp((el - 1.6 - i * 0.25 + 0.25) / 0.3, 0, 1); b.rotation.x = 1.25 * (1 - t * t); });
+    if (!app.beeped && app.countdown < 1.2) { app.beeped = true; audio.beep(); }
+    if (app.countdown <= 0) { app.state = 'ride'; app.rideT = 0; audio.hiss(); setTimeout(() => billboard.set(''), 900); }
   } else if (app.state === 'ride') {
     app.rideT += dt;
     track.sample(app.s, smp);
@@ -402,13 +450,13 @@ function loop(now) {
     }
     if (app.holdPhase === 'hold') {
       v = 0; app.holdT -= dt;
-      if (app.holdT < 0) { app.holdPhase = 'release'; audio.hiss(); audio.click(0.6, 600); }
+      if (app.holdT < 0) { app.holdPhase = 'release'; audio.hiss(); audio.click(0.6, 600); buzz([60, 40, 60], true); screamT = 0; setTimeout(() => screams(4, { dur: 2.6 }), 350); }
     } else if (app.holdPhase === 'release') {
       app.vRel += 9.81 * Math.max(0.15, -smp.t.y) * dt;
       if (app.vRel >= v) app.holdPhase = 'done'; else v = app.vRel;
     }
     // launch kick
-    if (smp.zone === 4 && !app.launched) { app.launched = true; audio.launch(); app.fx.shake = Math.max(app.fx.shake, 0.5); app.fovKick = 10; }
+    if (smp.zone === 4 && !app.launched) { app.launched = true; audio.launch(); app.fx.shake = Math.max(app.fx.shake, 0.5); app.fovKick = 10; buzz([300, 60, 500], true); screamT = 0; screams(3, { rise: 1.5 }); }
     const remain = track.length - app.dist;
     if (remain < 6) v = Math.max(0.25, Math.min(v, remain * 0.6));
     app.v = v;
@@ -463,10 +511,33 @@ function loop(now) {
   const sh = base + app.fx.shake * 0.05;
   tmpE.set(Math.sin(time * 41) * sh + Math.sin(time * 23.7) * sh * 0.6, Math.sin(time * 37.3) * sh * 0.7, Math.sin(time * 29.1) * sh * 0.5);
   shakeQ.setFromEuler(tmpE);
-  camera.quaternion.copy(dragQ).multiply(headQ).multiply(shakeQ);
-  // g-force compression
+  // head inertia: the body lags behind every push of the cart
+  inertia.update(dt, smp.t, smp.r, smp.u, app.v, app.mode === 'vr' ? 0.55 : 1);
+  tmpE.set(inertia.rot.pitch, 0, inertia.rot.roll);
+  inertiaQ.setFromEuler(tmpE);
+  camera.quaternion.copy(dragQ).multiply(inertiaQ).multiply(headQ).multiply(shakeQ);
   const gv = app.state === 'ride' ? smp.gv : 1;
-  camera.position.set(-0.38, 1.36 - THREE.MathUtils.clamp((gv - 1) * 0.018, -0.03, 0.06), -0.42);
+  camera.position.set(-0.38 + inertia.pos.x, 1.36 + inertia.pos.y, -0.42 + inertia.pos.z);
+  // passengers: arms up on drops, airtime, the roll and the launch
+  {
+    const inRoll = track.inRange(app.s, 'roll');
+    let want = 0;
+    if (app.state === 'ride') {
+      want = THREE.MathUtils.clamp((app.v - 20) / 10, 0, 1) * (smp.t.y < -0.2 ? 1 : 0.4);
+      if (gv < 0.35 || inRoll || smp.zone === 4 || app.holdPhase === 'release') want = 1;
+      if (app.holdPhase === 'hold') want = 0.15;
+    }
+    app.excite = (app.excite || 0) + (want - (app.excite || 0)) * Math.min(1, dt * 3);
+    riders.update(dt, app.excite, inertia.rot);
+    if (inRoll && !app.wasRoll) { screamT = 0; screams(4, { dur: 2.4 }); buzz([80, 60, 80, 60, 80], true); }
+    app.wasRoll = inRoll;
+    if (app.state === 'ride' && gv < 0.15 && app.v > 10) screams(2, { dur: 1.2 });
+    if (app.state === 'ride' && gv > 3.3) buzz(90);
+    if (onLift && Math.floor(app.dist / 0.55) !== app.lastChain) { app.lastChain = Math.floor(app.dist / 0.55); buzz(12, true); }
+  }
+  buzzT -= dt; screamT -= dt;
+  if (app.fx.flash > (app.lastFlash || 0) + 0.4) { screamT = 0; screams(3, { dur: 1.3, rise: 1.5 }); }
+  app.lastFlash = app.fx.flash;
 
   carts.front.updateMatrixWorld(true);
   camera.getWorldPosition(camWorld);
@@ -505,7 +576,7 @@ function loop(now) {
       smp.p.clone().addScaledVector(smp.r, (Math.random() < 0.5 ? -1 : 1) * (0.9 + Math.random() * 0.4)),
       smp.r.clone().multiplyScalar((Math.random() - 0.5) * 6).add(new THREE.Vector3(0, 3 + Math.random() * 4, 0)).addScaledVector(smp.t, app.v * 0.3),
       [0.85, 0.92, 0.95], 1.2, 0.3);
-    if (!app.splashed) { app.splashed = true; audio.splash(1); app.fx.shake = Math.max(app.fx.shake, 0.3); }
+    if (!app.splashed) { app.splashed = true; audio.splash(1); app.fx.shake = Math.max(app.fx.shake, 0.3); splashDrops(); buzz(150, true); screamT = 0; screams(2, { dur: 1.1 }); }
   } else if (smp.p.y > 3) app.splashed = false;
   for (const m of director.messages.splice(0)) {
     if (app.mode === 'normal') toast(m);

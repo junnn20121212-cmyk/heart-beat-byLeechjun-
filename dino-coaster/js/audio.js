@@ -20,6 +20,18 @@ export class AudioEngine {
     const comp = ctx.createDynamicsCompressor();
     comp.threshold.value = -14; comp.ratio.value = 4; comp.attack.value = 0.005; comp.release.value = 0.25;
     this.master.connect(comp); comp.connect(ctx.destination);
+    // tunnel / canyon reverb send
+    {
+      const len = Math.floor(ctx.sampleRate * 1.8);
+      const ir = ctx.createBuffer(2, len, ctx.sampleRate);
+      for (let ch = 0; ch < 2; ch++) {
+        const d = ir.getChannelData(ch);
+        for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3.2);
+      }
+      this.verb = ctx.createConvolver(); this.verb.buffer = ir;
+      this.verbG = ctx.createGain(); this.verbG.gain.value = 0.06;
+      this.master.connect(this.verb); this.verb.connect(this.verbG); this.verbG.connect(comp);
+    }
     // noise buffers
     const len = ctx.sampleRate * 2;
     this.white = ctx.createBuffer(1, len, ctx.sampleRate);
@@ -234,6 +246,78 @@ export class AudioEngine {
     nz.start(t0); nz.stop(t0 + 1.7);
   }
 
+  // passenger scream: sung vowel with formants, vibrato and breath
+  scream(pos, { pitch = 1, dur = 1.6, gain = 0.45, rise = 1.25 } = {}) {
+    if (!this.ctx) return;
+    const ctx = this.ctx, t0 = ctx.currentTime + Math.random() * 0.15;
+    const out = ctx.createGain(); out.gain.value = 0;
+    out.connect(this.panner(pos, 1.2));
+    const f0 = 520 * pitch;
+    const o = ctx.createOscillator(); o.type = 'sawtooth';
+    o.frequency.setValueAtTime(f0 * 0.85, t0);
+    o.frequency.linearRampToValueAtTime(f0 * rise, t0 + 0.25);
+    o.frequency.linearRampToValueAtTime(f0 * rise * 0.92, t0 + dur * 0.7);
+    o.frequency.linearRampToValueAtTime(f0 * 0.7, t0 + dur);
+    const vib = ctx.createOscillator(); vib.frequency.value = 5.5 + Math.random() * 2;
+    const vg = ctx.createGain(); vg.gain.value = f0 * 0.035;
+    vib.connect(vg); vg.connect(o.frequency);
+    const nz = ctx.createBufferSource(); nz.buffer = this.white; nz.loop = true;
+    const nbp = ctx.createBiquadFilter(); nbp.type = 'bandpass'; nbp.frequency.value = 2600; nbp.Q.value = 1;
+    const ng = ctx.createGain(); ng.gain.value = 0.12;
+    nz.connect(nbp); nbp.connect(ng);
+    // vowel "ah" formants
+    for (const [f, q, g] of [[850, 6, 1.0], [1250, 7, 0.6], [2900, 8, 0.25]]) {
+      const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = f * (0.95 + pitch * 0.08); bp.Q.value = q;
+      const gg = ctx.createGain(); gg.gain.value = g;
+      o.connect(bp); ng.connect(bp); bp.connect(gg); gg.connect(out);
+    }
+    out.gain.linearRampToValueAtTime(gain, t0 + 0.08);
+    out.gain.linearRampToValueAtTime(gain * 0.8, t0 + dur * 0.75);
+    out.gain.linearRampToValueAtTime(0, t0 + dur);
+    [o, vib, nz].forEach(n => { n.start(t0); n.stop(t0 + dur + 0.05); });
+  }
+
+  // lap bar locking clunk
+  clunk() {
+    if (!this.ctx) return;
+    this.click(0.5, 700);
+    const ctx = this.ctx, t0 = ctx.currentTime;
+    const o = ctx.createOscillator(); o.type = 'square';
+    o.frequency.setValueAtTime(180, t0); o.frequency.exponentialRampToValueAtTime(60, t0 + 0.08);
+    const g = ctx.createGain(); g.gain.value = 0.25; g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.12);
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 900;
+    o.connect(lp); lp.connect(g); g.connect(this.master);
+    o.start(t0); o.stop(t0 + 0.13);
+  }
+
+  // station dispatch beep
+  beep() {
+    if (!this.ctx) return;
+    const ctx = this.ctx, t0 = ctx.currentTime;
+    for (let k = 0; k < 2; k++) {
+      const o = ctx.createOscillator(); o.type = 'square'; o.frequency.value = 880;
+      const g = ctx.createGain(); g.gain.value = 0;
+      const t = t0 + k * 0.35;
+      g.gain.setValueAtTime(0.12, t); g.gain.setValueAtTime(0, t + 0.22);
+      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2500;
+      o.connect(lp); lp.connect(g); g.connect(this.master);
+      o.start(t); o.stop(t + 0.25);
+    }
+  }
+
+  // Korean station announcement (system speech voice, if the device has one)
+  announce(text) {
+    try {
+      if (!this.enabled || !window.speechSynthesis) return;
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = 'ko-KR'; u.rate = 1.05; u.pitch = 1.05; u.volume = 0.9;
+      const v = speechSynthesis.getVoices().find(v => v.lang && v.lang.startsWith('ko'));
+      if (v) u.voice = v;
+      speechSynthesis.cancel();
+      speechSynthesis.speak(u);
+    } catch (e) { /* no speech on this device */ }
+  }
+
   // pneumatic brake hiss (drop hold / release)
   hiss() {
     if (!this.ctx) return;
@@ -307,6 +391,7 @@ export class AudioEngine {
     this.rumbleG.gain.setTargetAtTime(v > 0.5 ? 0.12 + vn * 0.55 : 0, t, 0.1);
     this.rumbleLP.frequency.setTargetAtTime(90 + v * 6, t, 0.1);
     this.insectG.gain.setTargetAtTime(st.inTunnel ? 0.0 : 0.025, t, 0.3);
+    this.verbG.gain.setTargetAtTime(st.inTunnel ? 0.55 : 0.06, t, 0.2);
     this.droneG.gain.setTargetAtTime(st.tension * 0.12, t, 0.5);
     // rail joints
     this.clackDist += v * dt;
