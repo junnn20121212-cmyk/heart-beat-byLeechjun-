@@ -234,6 +234,39 @@ export class AudioEngine {
     nz.start(t0); nz.stop(t0 + 1.7);
   }
 
+  // pneumatic brake hiss (drop hold / release)
+  hiss() {
+    if (!this.ctx) return;
+    const ctx = this.ctx, t0 = ctx.currentTime;
+    const nz = ctx.createBufferSource(); nz.buffer = this.white;
+    const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 3000;
+    const g = ctx.createGain(); g.gain.value = 0;
+    g.gain.linearRampToValueAtTime(0.35, t0 + 0.03);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.9);
+    nz.connect(hp); hp.connect(g); g.connect(this.master);
+    nz.start(t0, Math.random()); nz.stop(t0 + 1);
+  }
+
+  // linear-motor launch: rising electric whine + whoosh
+  launch() {
+    if (!this.ctx) return;
+    const ctx = this.ctx, t0 = ctx.currentTime, dur = 2.6;
+    const o = ctx.createOscillator(); o.type = 'sawtooth';
+    o.frequency.setValueAtTime(90, t0); o.frequency.exponentialRampToValueAtTime(1400, t0 + dur);
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2500;
+    const g = ctx.createGain(); g.gain.value = 0;
+    g.gain.linearRampToValueAtTime(0.18, t0 + 0.2);
+    g.gain.linearRampToValueAtTime(0.0, t0 + dur);
+    o.connect(lp); lp.connect(g); g.connect(this.master);
+    const nz = ctx.createBufferSource(); nz.buffer = this.white;
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 0.8;
+    bp.frequency.setValueAtTime(300, t0); bp.frequency.exponentialRampToValueAtTime(3000, t0 + dur);
+    const ng = ctx.createGain(); ng.gain.value = 0;
+    ng.gain.linearRampToValueAtTime(0.6, t0 + 0.4); ng.gain.linearRampToValueAtTime(0, t0 + dur + 0.4);
+    nz.connect(bp); bp.connect(ng); ng.connect(this.master);
+    o.start(t0); o.stop(t0 + dur + 0.1); nz.start(t0, Math.random()); nz.stop(t0 + dur + 0.5);
+  }
+
   click(gain = 0.25, freq = 2500) {
     const ctx = this.ctx, t0 = ctx.currentTime;
     const nz = ctx.createBufferSource(); nz.buffer = this.white;
@@ -268,8 +301,8 @@ export class AudioEngine {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
     const v = st.speed;
-    const vn = Math.min(1, v / 30);
-    this.windG.gain.setTargetAtTime(0.03 + vn * vn * 0.55, t, 0.1);
+    const vn = Math.min(1.15, v / 30);
+    this.windG.gain.setTargetAtTime(0.03 + vn * vn * 0.75, t, 0.1);
     this.windBP.frequency.setTargetAtTime(300 + v * 45, t, 0.1);
     this.rumbleG.gain.setTargetAtTime(v > 0.5 ? 0.12 + vn * 0.55 : 0, t, 0.1);
     this.rumbleLP.frequency.setTargetAtTime(90 + v * 6, t, 0.1);

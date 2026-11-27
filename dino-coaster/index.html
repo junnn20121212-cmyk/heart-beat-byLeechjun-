@@ -60,6 +60,7 @@ details li{margin:3px 0}
 #prog{height:100%;width:0;background:var(--amber)}
 #fps{position:fixed;left:12px;bottom:10px;font-size:11px;opacity:.45;pointer-events:none}
 #flash{position:fixed;inset:0;pointer-events:none;background:radial-gradient(circle,rgba(160,0,0,0) 30%,rgba(190,10,0,.95) 100%);opacity:0}
+#gvig{position:fixed;inset:0;pointer-events:none;opacity:0;background:radial-gradient(ellipse at center,rgba(0,0,0,0) 38%,rgba(0,0,0,.95) 100%)}
 #fade{position:fixed;inset:0;pointer-events:none;background:#000;opacity:0}
 #toast{position:fixed;left:50%;top:22%;transform:translate(-50%,-8px);background:rgba(10,6,4,.7);border:1px solid rgba(242,182,50,.5);color:#ffe7a8;font-weight:900;font-size:clamp(18px,3.4vw,28px);padding:10px 20px;border-radius:12px;opacity:0;transition:opacity .25s,transform .25s;pointer-events:none;white-space:nowrap;max-width:92vw;overflow:hidden;text-overflow:ellipsis}
 #toast.show{opacity:1;transform:translate(-50%,0)}
@@ -68,7 +69,7 @@ details li{margin:3px 0}
 #end h2{font-family:"Black Han Sans",sans-serif;font-weight:400;font-size:44px;margin:0 0 6px;color:var(--amber)}
 #vrExit{position:fixed;top:max(8px,env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);display:none;min-height:36px;padding:4px 14px;font-size:13px;opacity:.55;z-index:5}
 body.vr #vrExit{display:block}
-body.vr #hud,body.vr #fps,body.vr .progress,body.vr #toast,body.vr #flash{display:none}
+body.vr #hud,body.vr #fps,body.vr .progress,body.vr #toast,body.vr #flash,body.vr #gvig{display:none}
 #vrDivider{position:fixed;left:50%;top:0;bottom:0;width:2px;margin-left:-1px;background:#000;display:none;pointer-events:none}
 body.vr #vrDivider{display:block}
 @media (min-width:900px) and (min-aspect-ratio:4/3){
@@ -95,6 +96,7 @@ body.vr #vrDivider{display:block}
 <body>
 <div id="view"></div>
 <div id="vrDivider"></div>
+<div id="gvig"></div>
 <div id="flash"></div>
 <div id="fade"></div>
 
@@ -108,7 +110,7 @@ body.vr #vrDivider{display:block}
   <div class="gate">
     <div class="hazard"></div>
     <div class="gl"><h1>DINO RUSH</h1>
-    <p class="sub">랩터, 트리케라톱스, 티라노, 브라키오, 프테라노돈이 기다리는 공룡 협곡. 이 녀석들이 열차를 덮칩니다. 탑승 시간 약 3분 20초.</p>
+    <p class="sub">랩터, 트리케라톱스, 티라노, 브라키오, 프테라노돈이 기다리는 공룡 협곡. 64m 수직 낙하, 시속 120km, 360° 회전. 이 녀석들이 열차를 덮칩니다.</p>
     </div><div class="gr">
     <div class="btns">
       <button class="primary" id="btnNormal">일반 모드로 탑승</button>

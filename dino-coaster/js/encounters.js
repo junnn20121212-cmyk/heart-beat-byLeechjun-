@@ -483,7 +483,7 @@ export class Director {
           t += dt;
           const sT = st.s + off + Math.sin(t * 0.8 + wob) * 2.5;
           this.trackPoint(sT, lat + Math.sin(t * 1.3 + wob) * 0.8, target);
-          this.moveToward(d, target, 16, dt, 5, 14);
+          this.moveToward(d, target, 19, dt, 5, 16);
           d.look = st.cam; d.lookW = 1;
           d.jawTarget = Math.max(0, Math.sin(t * 3 + wob)) * 0.8;
           this.focus = d.pos;

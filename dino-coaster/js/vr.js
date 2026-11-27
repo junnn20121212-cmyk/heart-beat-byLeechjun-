@@ -20,13 +20,14 @@ export class StereoRenderer {
       aspect: { value: 1 },
       flash: { value: 0 },
       fade: { value: 0 },
+      vig: { value: 0 },
       scale: { value: 1.12 },
     };
     this.quadMat = new THREE.ShaderMaterial({
       uniforms: this.uniforms,
       vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
       fragmentShader: `
-        uniform sampler2D tex; uniform float k1, k2, aspect, flash, fade, scale; varying vec2 vUv;
+        uniform sampler2D tex; uniform float k1, k2, aspect, flash, fade, scale, vig; varying vec2 vUv;
         void main(){
           vec2 p = (vUv - 0.5) * vec2(aspect, 1.0) * 2.0;
           float r2 = dot(p, p);
@@ -34,9 +35,10 @@ export class StereoRenderer {
           vec2 uv = d / vec2(aspect, 1.0) * 0.5 + 0.5;
           if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) { gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0); return; }
           vec3 c = texture2D(tex, uv).rgb;
-          float vig = smoothstep(1.6, 0.6, length(p));
-          c *= mix(0.75, 1.0, vig);
-          c = mix(c, vec3(0.9, 0.05, 0.02), flash * (1.0 - vig * 0.6) * 0.6);
+          float lv = smoothstep(1.6, 0.6, length(p));
+          c *= mix(0.75, 1.0, lv);
+          c *= mix(1.0 - vig, 1.0, smoothstep(1.3, 0.3, length(p)));
+          c = mix(c, vec3(0.9, 0.05, 0.02), flash * (1.0 - lv * 0.6) * 0.6);
           c *= (1.0 - fade);
           gl_FragColor = vec4(c, 1.0);
           #include <tonemapping_fragment>
@@ -98,6 +100,7 @@ export class StereoRenderer {
     this.uniforms.aspect.value = aspect;
     this.uniforms.flash.value = fx.flash || 0;
     this.uniforms.fade.value = fx.fade || 0;
+    this.uniforms.vig.value = fx.vig || 0;
     for (let i = 0; i < 2; i++) {
       r.setViewport(i * ew / pr, 0, ew / pr, H / pr);
       r.setScissor(i * ew / pr, 0, ew / pr, H / pr);

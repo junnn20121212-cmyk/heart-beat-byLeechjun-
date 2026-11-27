@@ -25,18 +25,23 @@ add('station0', [-70, 6, 0]);
 add('stationStop', [-40, 6, 0]);
 add('liftStart', [-15, 6, 0]);
 add(null, [10, 9, 0]);
-add(null, [35, 22, 0]);
-add(null, [60, 35, 0]);
-add(null, [85, 46, 0]);
-add('liftTop', [100, 50, 0]);
-add('crest', [114, 50.5, 0]);
-add(null, [127, 44, 0]);
-add(null, [142, 24, 2]);
-add('dropBottom', [156, 8, 6]);
+add(null, [32, 23, 0]);
+add(null, [54, 37, 0]);
+add(null, [76, 51, 0]);
+add('liftTop', [92, 61, 0]);
+add('crest', [103, 63.5, 0]);
+add(null, [111, 61.5, 0]);
+add('hold', [116.5, 56.5, 0.3]);
+add(null, [120.5, 44, 0.8]);
+add(null, [125.8, 27.5, 1.5]);
+add(null, [130.6, 18, 2.5]);
+add(null, [138.1, 10.5, 4]);
+add(null, [147.6, 5.7, 6]);
+add('dropBottom', [158.1, 4, 9]);
 add('rexValley', [175, 4.5, 18]);
 add(null, [195, 8, 42]);
 add(null, [206, 17, 70]);
-add('hill', [200, 21, 96]);
+add('hill', [200, 25, 96]);
 add(null, [182, 13, 118]);
 add(null, [160, 5, 135]);
 add('splash', [138, 1.3, 147]);
@@ -143,6 +148,7 @@ export class Track {
       lift2: [s('lift2Start'), s('lift2Top') + 2],
       drive: [s('helixOut') + 10, s('tunnelOut')],
       launch: [s('tunnelOut'), s('tunnelOut') + 50],
+      roll: [s('tunnelOut') + 56, s('tunnelOut') + 100],
       trim: [s('trim') - 22, s('trim') - 6],
       brake: [s('brake'), this.length],
       station: [0, s('liftStart') + 6],
@@ -167,14 +173,14 @@ export class Track {
       for (let k = 0; k < n; k++) {
         const i = (startI + k) % n, j = (i + 1) % n;
         const dy = this.P[j * 3 + 1] - this.P[i * 3 + 1];
-        let v2 = v * v - 2 * G * dy - 2 * (0.014 * G + 0.0011 * v * v) * ds;
+        let v2 = v * v - 2 * G * dy - 2 * (0.011 * G + 0.0008 * v * v) * ds;
         let nv = Math.sqrt(Math.max(v2, 0.01));
         const z = this.zone[j];
         if (z === 1) nv = 2.6;
         else if (z === 2) nv = 4.8;
-        else if (z === 3) nv = 10.5;
-        else if (z === 4) nv = Math.min(20, Math.sqrt(v * v + 2 * 7.5 * ds));
-        else if (z === 6) nv = Math.max(11, Math.min(nv, Math.sqrt(Math.max(v * v - 2 * 6 * ds, 0))));
+        else if (z === 3) nv = 12.5;
+        else if (z === 4) nv = Math.min(30, Math.sqrt(v * v + 2 * 14 * ds));
+        else if (z === 6) nv = Math.max(14, Math.min(nv, Math.sqrt(Math.max(v * v - 2 * 6 * ds, 0))));
         else if (z === 5) {
           const target = j * ds > brake2 ? 3.2 : 7.5;
           nv = Math.max(target, Math.min(nv, Math.sqrt(Math.max(v * v - 2 * 4.5 * ds, 0))));
@@ -224,6 +230,16 @@ export class Track {
         dst[i] = s / w;
       }
       const t = src; src = dst; dst = t;
+    }
+    // zero-g heartline roll: one full barrel roll on top of the banking
+    {
+      const [r0, r1] = this.ranges.roll;
+      for (let i = 0; i < n; i++) {
+        const sp = i * ds;
+        if (sp < r0 || sp > r1) continue;
+        const t = (sp - r0) / (r1 - r0);
+        src[i] += Math.PI * 2 * (t * t * (3 - 2 * t));
+      }
     }
     this.bank = src;
     for (let i = 0; i < n; i++) {
@@ -428,6 +444,7 @@ export function buildTrackMeshes(track, world, q) {
   const supStep = 9;
   for (let s = 0; s < L; s += supStep) {
     if (track.inRange(s, 'tunnel')) continue;
+    if (s > track.ranges.roll[0] - 4 && s < track.ranges.roll[1] + 4) continue;
     if (track.inRange(s, 'station') && s < track.sOf('liftStart')) continue;
     if (s > track.sOf('brake2') + 25) continue; // station approach on ground
     track.sample(s, smp);

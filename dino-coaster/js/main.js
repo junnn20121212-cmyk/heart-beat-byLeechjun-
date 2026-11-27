@@ -148,7 +148,7 @@ const app = {
   muted: false,
 };
 
-let menuCam, dust, renderer, scene, camera, track, world, director, audio, stereo, gyro, particles, carts, billboard, headlight, lapS0;
+let holdS, menuCam, dust, renderer, scene, camera, track, world, director, audio, stereo, gyro, particles, carts, billboard, headlight, lapS0;
 const smp = { p: new THREE.Vector3(), t: new THREE.Vector3(), r: new THREE.Vector3(), u: new THREE.Vector3() };
 const smp2 = { p: new THREE.Vector3(), t: new THREE.Vector3(), r: new THREE.Vector3(), u: new THREE.Vector3() };
 
@@ -177,6 +177,7 @@ async function init() {
   await nextFrame();
   track = new Track();
   lapS0 = track.sOf('stationStop');
+  holdS = track.sOf('hold') - 1;
 
   setProgress(0.15, '하늘과 조명');
   await nextFrame();
@@ -281,6 +282,7 @@ async function startRide(mode) {
   gyro.recenter();
   app.yaw = 0; app.pitch = 0;
   app.dist = 0; app.s = lapS0; app.v = 0; app.rideT = 0;
+  app.holdPhase = null; app.launched = false; app.fovKick = 0;
   app.countdown = mode === 'vr' ? 6 : 3.5;
   app.state = 'countdown';
   app.fx.fade = 1;
@@ -362,7 +364,8 @@ function onResize() {
   const w = window.innerWidth, h = window.innerHeight;
   renderer.setSize(w, h);
   camera.aspect = w / h;
-  camera.fov = w < h ? 85 : 72;
+  app.baseFov = w < h ? 85 : 72;
+  camera.fov = app.baseFov;
   camera.updateProjectionMatrix();
 }
 
@@ -391,6 +394,21 @@ function loop(now) {
     track.sample(app.s, smp);
     let v = smp.v;
     v *= Math.min(1, 0.2 + app.rideT / 1.5);
+    // dive-coaster hold: stop on the edge of the first drop, then let go
+    if (!app.holdPhase && app.s >= holdS && app.s < holdS + 20) {
+      app.holdPhase = 'hold'; app.holdT = 2.8; app.vRel = 0;
+      audio.hiss(); app.fx.shake = Math.max(app.fx.shake, 0.25);
+      if (app.mode === 'normal') toast('...떨어진다!!'); else { billboard.set('...!!'); app.msgT = 2.4; }
+    }
+    if (app.holdPhase === 'hold') {
+      v = 0; app.holdT -= dt;
+      if (app.holdT < 0) { app.holdPhase = 'release'; audio.hiss(); audio.click(0.6, 600); }
+    } else if (app.holdPhase === 'release') {
+      app.vRel += 9.81 * Math.max(0.15, -smp.t.y) * dt;
+      if (app.vRel >= v) app.holdPhase = 'done'; else v = app.vRel;
+    }
+    // launch kick
+    if (smp.zone === 4 && !app.launched) { app.launched = true; audio.launch(); app.fx.shake = Math.max(app.fx.shake, 0.5); app.fovKick = 10; }
     const remain = track.length - app.dist;
     if (remain < 6) v = Math.max(0.25, Math.min(v, remain * 0.6));
     app.v = v;
@@ -427,7 +445,21 @@ function loop(now) {
   if (gq) { tmpE.set(0, -app.yaw, 0, 'YXZ'); dragQ.setFromEuler(tmpE); }
   // shake
   app.fx.shake = Math.max(0, app.fx.shake - dt * 1.6);
-  const base = (app.v / 30) * 0.006 + (app.state === 'ride' ? 0.0008 : 0);
+  const base = (app.v / 30) * 0.009 + (app.state === 'ride' ? 0.0008 : 0);
+  // speed sensation: widen the view with speed (not in VR, where FOV is fixed by the lenses)
+  app.fovKick = Math.max(0, (app.fovKick || 0) - dt * 4);
+  if (app.mode === 'normal') {
+    const want = app.baseFov + THREE.MathUtils.clamp((app.v - 12) * 0.5, 0, 14) + app.fovKick;
+    camera.fov += (want - camera.fov) * Math.min(1, dt * 3);
+    camera.updateProjectionMatrix();
+  }
+  // tunnel vision under high g / high speed
+  {
+    const g = app.state === 'ride' ? smp.gv : 1;
+    const want = THREE.MathUtils.clamp((g - 2.6) * 0.35, 0, 0.7) + THREE.MathUtils.clamp((app.v - 22) / 30, 0, 0.35) + THREE.MathUtils.clamp(-g * 0.25, 0, 0.2);
+    app.fx.vig = (app.fx.vig || 0) + (want - (app.fx.vig || 0)) * Math.min(1, dt * 4);
+    $('gvig').style.opacity = app.mode === 'normal' ? app.fx.vig.toFixed(3) : 0;
+  }
   const sh = base + app.fx.shake * 0.05;
   tmpE.set(Math.sin(time * 41) * sh + Math.sin(time * 23.7) * sh * 0.6, Math.sin(time * 37.3) * sh * 0.7, Math.sin(time * 29.1) * sh * 0.5);
   shakeQ.setFromEuler(tmpE);
