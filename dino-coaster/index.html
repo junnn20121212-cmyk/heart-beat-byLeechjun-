@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="theme-color" content="#0b120c">
+<title>Dino Rush VR</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Noto+Sans+KR:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+/* VOICE occasion: a theme-park ride poster, dark jungle at dusk
+   IDEA the boarding gate of a jungle coaster: carved wooden sign, amber warning paint
+   PICTURE the live 3D ride itself fills the screen behind the gate
+   COLOUR night jungle #0b120c, amber #f2b632, bone #f4ead2, blood red #c2271b
+   TYPE Black Han Sans + Noto Sans KR
+   LAYOUT full-bleed canvas; gate card bottom-left on laptop, bottom sheet on phone */
+:root{color-scheme:dark;--bg:#0b120c;--ink:#f4ead2;--amber:#f2b632;--red:#c2271b;--card:rgba(10,16,10,.82);--line:rgba(244,234,210,.16)}
+*{box-sizing:border-box;min-width:0}
+[hidden]{display:none!important}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);overflow:hidden;font:16px/1.5 "Noto Sans KR",system-ui,sans-serif;-webkit-tap-highlight-color:transparent;touch-action:none;user-select:none}
+#view{position:fixed;inset:0}
+#view canvas{display:block;width:100%;height:100%}
+.overlay{position:fixed;inset:0;display:flex;pointer-events:none}
+.overlay>*{pointer-events:auto}
+#loading{align-items:center;justify-content:center;background:radial-gradient(circle at 50% 40%,#1d2b17,#060a06 70%);flex-direction:column;gap:18px;padding:24px}
+#loading h1,#menu h1{font-family:"Black Han Sans",sans-serif;font-weight:400;letter-spacing:.01em;margin:0;line-height:1.02}
+#loading h1{font-size:clamp(44px,9vw,92px);color:var(--amber);text-shadow:0 4px 0 #5a3a10}
+.barwrap{width:min(420px,80vw);height:10px;border-radius:5px;background:#1c2618;overflow:hidden;border:1px solid var(--line)}
+#bar{height:100%;width:0;background:linear-gradient(90deg,#c8791a,var(--amber));transition:width .25s}
+#loadLabel{font-size:14px;opacity:.8}
+#menu{align-items:flex-end;justify-content:flex-start;padding:max(4vw,16px);padding-left:max(4vw,16px,env(safe-area-inset-left,0px));padding-right:max(4vw,16px,env(safe-area-inset-right,0px));padding-bottom:max(4vw,16px,env(safe-area-inset-bottom,0px));background:linear-gradient(0deg,rgba(5,8,5,.85),rgba(5,8,5,0) 60%)}
+.gate{width:min(520px,100%);background:var(--card);border:1px solid var(--line);border-radius:18px;padding:22px 22px 18px;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);box-shadow:0 10px 0 rgba(0,0,0,.3)}
+.hazard{height:10px;border-radius:4px;margin:-6px 0 16px;background:repeating-linear-gradient(-45deg,var(--amber) 0 14px,#16140c 14px 28px)}
+#menu h1{font-size:clamp(46px,8vw,72px);color:var(--amber);text-shadow:0 3px 0 #5a3a10}
+.sub{margin:6px 0 16px;font-size:16px;color:#e6dcc2}
+.btns{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+button{font:inherit;cursor:pointer;border:0;border-radius:12px;min-height:52px;padding:10px 14px;font-weight:900;font-size:17px;transition:transform .08s,filter .15s}
+button:active{transform:scale(.97)}
+button:focus-visible{outline:3px solid #fff;outline-offset:2px}
+.primary{background:var(--amber);color:#1a1205}
+.vrb{background:var(--red);color:#fff}
+.ghost{background:rgba(244,234,210,.1);color:var(--ink);border:1px solid var(--line);font-weight:700;font-size:15px;min-height:44px}
+button:hover{filter:brightness(1.08)}
+.small{font-size:13px;opacity:.85}
+.opts{display:flex;flex-wrap:wrap;gap:8px 16px;margin-top:14px;align-items:center;font-size:14px}
+.opts label{display:flex;gap:6px;align-items:center;white-space:nowrap}
+select{font:inherit;font-size:14px;background:#1a2416;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:6px 8px}
+details{margin-top:12px;font-size:14px;color:#ddd3bb}
+summary{cursor:pointer;font-weight:700;color:var(--ink)}
+details ol{margin:8px 0 0;padding-left:20px}
+details li{margin:3px 0}
+#hud{position:fixed;left:0;right:0;top:0;display:flex;justify-content:space-between;align-items:flex-start;padding:12px max(12px,env(safe-area-inset-right,0px)) 0 max(12px,env(safe-area-inset-left,0px));padding-top:max(12px,env(safe-area-inset-top,0px));pointer-events:none;gap:10px}
+.meter{background:rgba(6,10,6,.55);border:1px solid var(--line);border-radius:12px;padding:8px 12px;display:flex;gap:16px;align-items:baseline}
+.meter b{font-family:"Black Han Sans",sans-serif;font-weight:400;font-size:30px;color:var(--amber);font-variant-numeric:tabular-nums;line-height:1}
+.meter span{font-size:12px;opacity:.8;margin-left:3px}
+.hudbtns{display:flex;gap:6px;pointer-events:auto;flex-wrap:wrap;justify-content:flex-end}
+.hudbtns button{min-height:40px;font-size:13px;padding:6px 10px;border-radius:10px}
+.progress{position:fixed;left:0;right:0;bottom:0;height:5px;background:rgba(0,0,0,.4)}
+#prog{height:100%;width:0;background:var(--amber)}
+#fps{position:fixed;left:12px;bottom:10px;font-size:11px;opacity:.45;pointer-events:none}
+#flash{position:fixed;inset:0;pointer-events:none;background:radial-gradient(circle,rgba(160,0,0,0) 30%,rgba(190,10,0,.95) 100%);opacity:0}
+#fade{position:fixed;inset:0;pointer-events:none;background:#000;opacity:0}
+#toast{position:fixed;left:50%;top:22%;transform:translate(-50%,-8px);background:rgba(10,6,4,.7);border:1px solid rgba(242,182,50,.5);color:#ffe7a8;font-weight:900;font-size:clamp(18px,3.4vw,28px);padding:10px 20px;border-radius:12px;opacity:0;transition:opacity .25s,transform .25s;pointer-events:none;white-space:nowrap;max-width:92vw;overflow:hidden;text-overflow:ellipsis}
+#toast.show{opacity:1;transform:translate(-50%,0)}
+#end{align-items:center;justify-content:center;background:rgba(0,0,0,.45);padding:16px}
+#end .gate{text-align:left}
+#end h2{font-family:"Black Han Sans",sans-serif;font-weight:400;font-size:44px;margin:0 0 6px;color:var(--amber)}
+#vrExit{position:fixed;top:max(8px,env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);display:none;min-height:36px;padding:4px 14px;font-size:13px;opacity:.55;z-index:5}
+body.vr #vrExit{display:block}
+body.vr #hud,body.vr #fps,body.vr .progress,body.vr #toast,body.vr #flash{display:none}
+#vrDivider{position:fixed;left:50%;top:0;bottom:0;width:2px;margin-left:-1px;background:#000;display:none;pointer-events:none}
+body.vr #vrDivider{display:block}
+@media (max-width:600px){
+  .gate{padding:18px 16px 14px}
+  .btns{grid-template-columns:1fr}
+  #menu{padding-left:max(12px,env(safe-area-inset-left,0px));padding-right:max(12px,env(safe-area-inset-right,0px))}
+  .meter b{font-size:24px}
+}
+@media (max-height:480px) and (orientation:landscape){
+  .gate{padding:12px 16px}
+  #menu h1{font-size:40px}
+  .sub{margin:2px 0 8px;font-size:14px}
+  details{display:none}
+}
+</style>
+</head>
+<body>
+<div id="view"></div>
+<div id="vrDivider"></div>
+<div id="flash"></div>
+<div id="fade"></div>
+
+<div id="loading" class="overlay">
+  <h1>DINO RUSH</h1>
+  <div class="barwrap"><div id="bar"></div></div>
+  <div id="loadLabel">불러오는 중…</div>
+</div>
+
+<div id="menu" class="overlay" hidden>
+  <div class="gate">
+    <div class="hazard"></div>
+    <h1>DINO RUSH</h1>
+    <p class="sub">공룡 협곡을 가로지르는 롤러코스터. 티라노, 랩터, 스피노가 열차를 덮칩니다. 탑승 시간 약 3분 20초.</p>
+    <div class="btns">
+      <button class="primary" id="btnNormal">일반 모드로 탑승</button>
+      <button class="vrb" id="btnVR">카드보드 VR 탑승</button>
+    </div>
+    <div class="opts">
+      <label>화질 <select id="qual"><option value="high">높음 (PC)</option><option value="low">보통 (휴대폰)</option></select></label>
+      <label><input type="checkbox" id="gyroToggle" checked> 일반 모드에서 자이로</label>
+      <label><input type="checkbox" id="lens" checked> VR 렌즈 왜곡 보정</label>
+    </div>
+    <details>
+      <summary>카드보드로 타는 방법</summary>
+      <ol>
+        <li>소리를 켜고(이어폰 추천) <b>카드보드 VR 탑승</b>을 누르세요.</li>
+        <li>휴대폰을 <b>가로</b>로 돌려 카드보드에 끼우세요. 화면이 좌우 두 개로 나뉩니다.</li>
+        <li>머리를 돌리면 360° 둘러볼 수 있어요. 정면이 틀어지면 화면을 두 번 탭하세요.</li>
+        <li>PC에서는 마우스 드래그로 둘러보고, R 키로 정면 재설정, Esc로 나가기.</li>
+      </ol>
+    </details>
+  </div>
+</div>
+
+<div id="hud" hidden>
+  <div class="meter"><div><b id="spd">0</b><span>km/h</span></div><div><b id="gf">1.0</b><span>G</span></div></div>
+  <div class="hudbtns">
+    <button class="ghost" id="btnCenter">정면</button>
+    <button class="ghost" id="btnMute">소리 끄기</button>
+    <button class="ghost" id="btnExit">나가기</button>
+  </div>
+</div>
+<div class="progress"><div id="prog"></div></div>
+<div id="fps"></div>
+<div id="toast"></div>
+<button class="ghost" id="vrExit">VR 종료</button>
+
+<div id="end" class="overlay" hidden>
+  <div class="gate">
+    <div class="hazard"></div>
+    <h2>살아서 돌아왔다!</h2>
+    <p class="sub">티라노 두 마리, 스피노사우루스, 랩터 무리, 카르노타우루스를 모두 따돌렸습니다.</p>
+    <div class="btns">
+      <button class="primary" id="btnAgain">한 번 더 타기</button>
+      <button class="ghost" id="btnMenu">처음으로</button>
+    </div>
+  </div>
+</div>
+
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+</script>
+<script type="module" src="./js/main.js"></script>
+</body>
+</html>
