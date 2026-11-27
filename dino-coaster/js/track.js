@@ -548,9 +548,10 @@ export function buildCart(texSet) {
         // the lap bar swings on a hinge so it can lower onto the rider
         const hinge = new THREE.Group();
         hinge.position.set(sx, 0.8, row + 0.02);
-        const bar = new THREE.Mesh(new THREE.TorusGeometry(0.24, 0.035, 8, 20, Math.PI), chrome);
-        bar.rotation.x = Math.PI / 2 + 0.25;
-        bar.position.set(0, 0.06, -0.32);
+        // low, straight grab bar over the lap (no hoop in front of the face)
+        const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.5, 10), chrome);
+        bar.rotation.z = Math.PI / 2;
+        bar.position.set(0, 0.07, -0.33);
         const pad = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.44, 10), rubber);
         pad.rotation.z = Math.PI / 2;
         pad.position.set(0, 0, -0.54);
@@ -558,15 +559,12 @@ export function buildCart(texSet) {
         arm.position.set(0, 0.02, -0.28);
         hinge.add(bar, pad, arm);
         g.add(hinge);
+        hinge.userData.own = isFront && sx < 0 && row < 0;
         (g.userData.bars = g.userData.bars || []).push(hinge);
       }
     }
     // grab handle at front cowl
     if (isFront) {
-      const h = new THREE.Mesh(new THREE.TorusGeometry(0.55, 0.03, 8, 24, Math.PI), chrome);
-      h.position.set(0, 1.0, -1.0);
-      h.rotation.x = -0.3;
-      g.add(h);
       // headlights
       for (const sx of [-0.5, 0.5]) {
         const l = new THREE.Mesh(new THREE.SphereGeometry(0.09, 12, 8), new THREE.MeshStandardMaterial({ color: 0xfff2c0, emissive: 0xffe6a0, emissiveIntensity: 2 }));

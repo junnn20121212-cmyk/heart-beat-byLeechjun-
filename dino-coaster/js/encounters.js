@@ -680,7 +680,7 @@ export class Director {
     // clear a lane through the vegetation for the stampede
     for (let k = 0; k <= 1; k += 6 / A.distanceTo(B)) this.world.clearAround(A.x + (B.x - A.x) * k, A.z + (B.z - A.z) * k, 5);
     const spd = 11.5 * (d.scale || 1) ** 0.3;
-    const runTime = Math.abs(latA) / spd;
+    const runTime = Math.abs(latA) / spd + spd / (2 * 4); // includes accelerating from a standstill
     d.place(A.x, A.y, A.z, Math.atan2(B.x - A.x, B.z - A.z));
     let state = 'wait', t = 0, bellowed = false, stepPh = 0;
     return {
@@ -690,7 +690,7 @@ export class Director {
         if (state === 'wait') {
           d.speed = 0;
           d.headDip = 0.3;
-          if (ds < 450 && ds > 0 && this.eta(sAt, st.s) < runTime + 1.3) { state = 'run'; t = 0; }
+          if (ds < 450 && ds > 0 && this.eta(sAt, st.s) < runTime + (lead ? 0.55 : 1.3)) { state = 'run'; t = 0; d._bumped = false; }
         } else if (state === 'run') {
           t += dt;
           d.headDip = 0.35; // horns down
@@ -701,6 +701,16 @@ export class Director {
           const ph = Math.floor(d.phase / Math.PI);
           if (ph !== stepPh) { stepPh = ph; const dist = d.pos.distanceTo(st.cam); if (dist < 50) { this.audio.thump(d.pos, 0.5); this.fx.shake = Math.max(this.fx.shake, 0.15 * (1 - dist / 50)); } }
           this.particles.emitDust(d.pos, dt);
+          // the stampede clips the train: heavy jolt, side shove, thud
+          if (!d._bumped && d.pos.distanceTo(st.cam) < (lead ? 9 : 7)) {
+            d._bumped = true;
+            const s0 = lead ? 1.0 : 0.6;
+            this.fx.shake = Math.max(this.fx.shake, s0);
+            this.fx.kick = (this.fx.kick || 0) + (lead ? 0.9 : 0.5) * (Math.random() < 0.5 ? -1 : 1);
+            this.audio.thump(d.pos, 1.6 * s0); this.audio.thump(st.cam, 1.2 * s0); this.audio.clunk();
+            try { if (navigator.vibrate) navigator.vibrate(lead ? [180, 40, 120] : [90]); } catch (e) { /* ignore */ }
+            if (lead) this.say('쾅! 트리케라톱스와 부딪혔다!');
+          }
           d._plumeT = (d._plumeT || 0) - dt;
           if (d._plumeT < 0) { d._plumeT = 0.22; this.plume(d.pos, 3 * (d.scale || 1)); }
         } else if (state === 'done') {

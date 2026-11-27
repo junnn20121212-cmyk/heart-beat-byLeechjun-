@@ -260,8 +260,10 @@ function placeCart(s) {
 }
 
 // ---------------- ride feel helpers ----------------
-const bars = () => (carts.front.userData.bars || []).concat(carts.back.userData.bars || []);
-function setBars(k) { for (const b of bars()) b.rotation.x = 1.25 * k; }
+// only the rider's own lap bar moves; the empty seats keep theirs down
+const BAR_UP = 1.95; // raised bar swings up and back, clear of the eyes
+const bars = () => (carts.front.userData.bars || []).filter(b => b.userData.own);
+function setBars(k) { for (const b of carts.front.userData.bars.concat(carts.back.userData.bars)) b.rotation.x = b.userData.own ? BAR_UP * k : 0; }
 let buzzT = 0;
 function buzz(p, force = false) {
   if (!force && buzzT > 0) return;
@@ -331,7 +333,7 @@ async function startRide(mode) {
 function endRide() {
   app.state = 'end';
   app.endT = 0;
-  setTimeout(() => { for (const b of bars()) b.rotation.x = 1.25; audio.hiss(); }, 1800);
+  setTimeout(() => { if (app.state !== 'end') return; for (const b of bars()) b.rotation.x = BAR_UP; audio.hiss(); }, 1800);
   if (app.mode === 'normal') { $('end').hidden = false; $('hud').hidden = true; }
 }
 
@@ -434,11 +436,12 @@ function loop(now) {
     const nb = bars().length;
     const lowered = Math.min(nb, Math.floor((el - 1.6) / 0.25) + 1);
     while (app.barsDown < lowered && app.barsDown < nb) { audio.clunk(); if (app.barsDown === 0) buzz(40, true); app.barsDown++; }
-    bars().forEach((b, i) => { const t = THREE.MathUtils.clamp((el - 1.6 - i * 0.25 + 0.25) / 0.3, 0, 1); b.rotation.x = 1.25 * (1 - t * t); });
+    bars().forEach((b, i) => { const t = THREE.MathUtils.clamp((el - 1.6 - i * 0.25 + 0.25) / 0.3, 0, 1); b.rotation.x = BAR_UP * (1 - t * t); });
     if (!app.beeped && app.countdown < 1.2) { app.beeped = true; audio.beep(); }
     if (app.countdown <= 0) { app.state = 'ride'; app.rideT = 0; audio.hiss(); setTimeout(() => billboard.set(''), 900); }
   } else if (app.state === 'ride') {
     app.rideT += dt;
+    for (const b of bars()) b.rotation.x = 0; // the lap bar is always locked down while riding
     track.sample(app.s, smp);
     let v = smp.v;
     v *= Math.min(1, 0.2 + app.rideT / 1.5);
@@ -513,6 +516,12 @@ function loop(now) {
   shakeQ.setFromEuler(tmpE);
   // head inertia: the body lags behind every push of the cart
   inertia.update(dt, smp.t, smp.r, smp.u, app.v, app.mode === 'vr' ? 0.55 : 1);
+  if (app.fx.kick) {
+    // a side impact (triceratops) shoves the cart and snaps the head sideways
+    const k = app.fx.kick * (app.mode === 'vr' ? 0.6 : 1);
+    inertia.vel.x += k * 1.1; inertia.rot.vr += k * 2.2; inertia.vel.y += 0.35;
+    app.fx.kick = 0;
+  }
   tmpE.set(inertia.rot.pitch, 0, inertia.rot.roll);
   inertiaQ.setFromEuler(tmpE);
   camera.quaternion.copy(dragQ).multiply(inertiaQ).multiply(headQ).multiply(shakeQ);

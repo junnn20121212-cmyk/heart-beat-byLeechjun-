@@ -118,9 +118,11 @@ export class Riders {
   constructor(carts, high) {
     this.list = [];
     let seed = 1234;
-    const seatsFront = [[0.38, -0.35], [-0.38, 0.65], [0.38, 0.65]];
+    // solo ride: no other passengers (set SOLO = false to bring them back)
+    const SOLO = true;
+    const seatsFront = SOLO ? [] : [[0.38, -0.35], [-0.38, 0.65], [0.38, 0.65]];
     seatsFront.forEach(([x, z]) => { const p = passenger(x, z, seed += 977); carts.front.add(p.root); this.list.push(p); });
-    if (high) {
+    if (high && !SOLO) {
       [[-0.38, -0.35], [0.38, -0.35], [-0.38, 0.65], [0.38, 0.65]].forEach(([x, z]) => {
         const p = passenger(x, z, seed += 977); carts.back.add(p.root); this.list.push(p);
       });
