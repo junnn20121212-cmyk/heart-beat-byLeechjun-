@@ -2,7 +2,8 @@
 import * as THREE from 'three';
 import * as TX from './textures.js';
 import { mergeGeos } from './world.js';
-import { clamp, lerp } from './noise.js';
+import { clamp, lerp, makeNoise2D } from './noise.js';
+const skinNoise = makeNoise2D(77);
 
 // ---------- geometry helpers ----------
 function cr(a, b, c, d, t) {
@@ -45,8 +46,15 @@ function loft(st, o = {}) {
     for (let j = 0; j <= nR; j++) {
       const th = j / nR * Math.PI * 2;
       const s = Math.sin(th), c = Math.cos(th);
-      const x = rx * s * (1 - narrow * Math.max(0, c));
-      const off = (c >= 0 ? ryT : ryB) * c;
+      let x = rx * s * (1 - narrow * Math.max(0, c));
+      let off = (c >= 0 ? ryT : ryB) * c;
+      if (o.bump) {
+        // muscle bulges, skin folds and lumpy scutes break the perfect tube silhouette
+        const along = arc[i];
+        const m = 1 + o.bump * (0.55 * skinNoise(along * 1.6, th * 1.3) + 0.3 * skinNoise(along * 5, th * 4)
+          + 0.25 * Math.pow(Math.abs(Math.sin(along * 9)), 6) * Math.max(0, -c * 0.5 + 0.5) * -1);
+        x *= m; off *= m;
+      }
       pos.push(x, yc + upY * off, zc + upZ * off);
       uv.push((o.uOffset || 0) + (o.uScale ?? 1) * arc[i] / total, j / nR * (o.vScale || 1));
       prm.push(i / nA);
@@ -128,7 +136,7 @@ function skinMaterial(key, skin, repeatU = 18, repeatV = 6) {
   const nrm = sharedNormal.tex.clone();
   nrm.needsUpdate = true;
   nrm.repeat.set(repeatU, repeatV);
-  const m = new THREE.MeshStandardMaterial({ map: base, normalMap: nrm, normalScale: new THREE.Vector2(0.7, 0.7), roughness: skin.rough ?? 0.7, metalness: 0 });
+  const m = new THREE.MeshStandardMaterial({ map: base, normalMap: nrm, normalScale: new THREE.Vector2(0.9, 0.9), roughness: skin.rough ?? 0.74, metalness: 0, envMapIntensity: 0.65 });
   matCache.set(k, m);
   return m;
 }
@@ -330,6 +338,51 @@ SPECIES.trike = {
 };
 SPECIES.trike2 = { ...SPECIES.trike, skin: { seed: 42, base: [118, 112, 80], dark: [72, 68, 48], belly: [172, 164, 130], stripeFreq: 10, stripeAmt: 0.12, mottle: 1.0, wrinkle: 0.9, frill: [190, 170, 130] } };
 
+SPECIES.parasaur = {
+  kind: 'biped', runSpeed: 9, bump: 0.05,
+  skin: { seed: 61, base: [152, 128, 94], dark: [92, 74, 52], belly: [204, 190, 160], stripeFreq: 30, stripeAmt: 0.35, mottle: 0.7, wrinkle: 0.8 },
+  body: [
+    [-5.6, 0.3, 0.02, 0.02, 0.02], [-4.6, 0.3, 0.1, 0.17, 0.17], [-3.4, 0.25, 0.2, 0.33, 0.31], [-2.2, 0.18, 0.33, 0.46, 0.44],
+    [-1.0, 0.12, 0.5, 0.6, 0.64], [0.2, 0.1, 0.62, 0.68, 0.88], [1.4, 0.05, 0.62, 0.62, 0.92], [2.4, 0.1, 0.5, 0.5, 0.72],
+    [3.0, 0.45, 0.3, 0.3, 0.36], [3.4, 0.9, 0.22, 0.22, 0.24], [3.62, 1.15, 0.2, 0.2, 0.2],
+  ],
+  joints: { root: 5.0, tail: [3.8, 2.8, 1.9, 1.0], front: [6.6, 8.0, 9.0, 10] },
+  neckFrom: 1, headPitch: 0.15,
+  skull: [[-0.2, 0.02, 0.16, 0.2, 0.18], [0.05, 0.06, 0.17, 0.2, 0.08], [0.35, 0.02, 0.14, 0.15, 0.06], [0.6, -0.04, 0.14, 0.1, 0.05], [0.75, -0.06, 0.15, 0.08, 0.04], [0.82, -0.07, 0.05, 0.03, 0.02]],
+  jaw: { at: [0, -0.03, -0.1], st: [[-0.1, -0.06, 0.15, 0.03, 0.1], [0.3, -0.03, 0.13, 0.03, 0.07], [0.65, -0.04, 0.13, 0.02, 0.04], [0.78, -0.05, 0.04, 0.01, 0.02]], open: 0.45 },
+  teeth: null, beak: true,
+  eye: { z: 0.0, y: 0.1, r: 0.035, iris: [150, 110, 50] },
+  tubeCrest: { at: [0, 0.16, -0.05], len: 1.3, r: 0.07, angle: 0.55, color: 0x8a5a3a },
+  leg: { at: [0.45, -0.25, 0.1], len: [1.1, 1.05, 0.55], a: [-0.35, 0.85, -0.75],
+    thigh: [[-0.28, 0, 0.27, 0.34, 0.46], [0.2, 0, 0.32, 0.34, 0.45], [0.7, 0.03, 0.22, 0.22, 0.28], [1.1, 0, 0.14, 0.14, 0.15], [1.2, 0, 0.06, 0.06, 0.06]],
+    shin: [[-0.08, 0, 0.15, 0.16, 0.18], [0.5, 0, 0.13, 0.12, 0.16], [1.05, 0, 0.09, 0.09, 0.09], [1.13, 0, 0.04, 0.04, 0.04]],
+    meta: [[-0.06, 0, 0.1, 0.1, 0.11], [0.55, 0, 0.09, 0.09, 0.08], [0.62, 0, 0.04, 0.04, 0.04]],
+    toe: { n: 3, len: 0.32, r: 0.08, spread: 0.3, claw: 0.05 } },
+  arm: { at: [0.4, -0.45, 2.2], len: [0.5, 0.45], r: 0.07, claws: 3, a: [-0.9, -0.4] },
+  roarPitch: 1.5, roarSize: 0.9,
+};
+
+SPECIES.ankylo = {
+  kind: 'quad', runSpeed: 2.5, H: 1.6, bump: 0.08,
+  skin: { seed: 71, base: [122, 106, 80], dark: [70, 58, 42], belly: [178, 162, 132], spotAmt: 0.45, spotFreq: 30, stripeFreq: 8, stripeAmt: 0.1, mottle: 0.9, wrinkle: 1.0 },
+  body: [
+    [-3.6, 0.0, 0.03, 0.03, 0.03], [-3.0, 0.05, 0.1, 0.1, 0.1], [-2.1, 0.15, 0.22, 0.2, 0.22], [-1.1, 0.3, 0.72, 0.46, 0.5],
+    [0.0, 0.38, 1.05, 0.6, 0.7], [1.2, 0.3, 1.02, 0.58, 0.72], [2.2, 0.05, 0.72, 0.45, 0.55], [2.75, -0.15, 0.42, 0.32, 0.36], [3.0, -0.2, 0.36, 0.3, 0.32],
+  ],
+  joints: { root: 4.0, tail: [3.0, 2.0, 1.0], front: [5.8, 7.0, 8] },
+  neckFrom: 1, headPitch: 0.25,
+  skull: [[-0.15, 0, 0.3, 0.22, 0.2], [0.15, 0.04, 0.32, 0.22, 0.12], [0.4, 0, 0.26, 0.17, 0.1], [0.55, -0.05, 0.18, 0.1, 0.06], [0.6, -0.06, 0.06, 0.03, 0.03]],
+  jaw: { at: [0, -0.05, -0.05], st: [[-0.05, -0.04, 0.26, 0.03, 0.1], [0.35, -0.02, 0.2, 0.02, 0.06], [0.55, -0.03, 0.06, 0.01, 0.02]], open: 0.3 },
+  teeth: null, beak: true, brow: true,
+  eye: { z: 0.12, y: 0.08, r: 0.03, iris: [140, 100, 40] },
+  armor: true,
+  rear: { at: [0.62, -0.25, 0.2], frac: [0.55, 0.45], a: [-0.15, 0.3], r: [0.32, 0.2, 0.19] },
+  front: { at: [0.55, -0.35, 2.1], frac: [0.55, 0.45], a: [0.1, -0.15], r: [0.26, 0.17, 0.16] },
+  footH: 0.15, roarPitch: 1.3, roarSize: 0.8,
+};
+
+SPECIES.compy = { ...SPECIES.raptor, feathers: false, runSpeed: 9, skin: { seed: 81, base: [118, 124, 82], dark: [60, 66, 40], belly: [196, 190, 150], stripeFreq: 14, stripeAmt: 0.45, mottle: 0.6, wrinkle: 0.4 } };
+
 // ---------------- builder ----------------
 export class Dino {
   constructor(key, opts = {}) {
@@ -345,7 +398,7 @@ export class Dino {
     const girth = Math.max(...st.map(s => s[2])) * 4.5;
     const mat = skinMaterial(key, spec.skin, bodyLen * 1.6, Math.max(3, girth * 1.6));
     this.mat = mat;
-    const geo = loft(st, { along: opts.along || 72, around: opts.around || 22, narrow: 0.2 });
+    const geo = loft(st, { along: opts.along || 72, around: opts.around || 22, narrow: 0.2, bump: spec.bump ?? 0.05 });
     // ---- bones ----
     const N = st.length - 1;
     const P = idx => { const s = interp(st, idx / N); return new THREE.Vector3(0, s[1], s[0]); };
@@ -763,7 +816,47 @@ export class Dino {
       }
     }
 
-    this.pivot.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = false; } });
+    // ---- extra species features ----
+    if (spec.tubeCrest) {
+      const tc = spec.tubeCrest;
+      const g = loft([[0, 0, tc.r * 0.8, tc.r, tc.r], [tc.len * 0.5, 0.02, tc.r, tc.r * 1.1, tc.r], [tc.len, 0, tc.r * 0.7, tc.r * 0.8, tc.r * 0.7], [tc.len + 0.06, 0, 0.02, 0.02, 0.02]], { along: 10, around: 10, narrow: 0, uScale: 0.05, uOffset: 0.95 });
+      const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: tc.color, roughness: 0.6, normalMap: mat.normalMap }));
+      m.position.set(0, tc.at[1], tc.at[2]);
+      m.rotation.x = Math.PI + tc.angle; // point backwards and up
+      head.add(m);
+    }
+    if (spec.armor) {
+      // rows of bony osteoderms over the back and spikes on the flanks
+      const bonesM = C.horn;
+      const studs = [], spikes = [];
+      for (let z = -2.4; z <= 2.3; z += 0.34) {
+        const b = atZ(st, z);
+        const rowN = 5;
+        for (let k = 0; k < rowN; k++) {
+          const th = (k - (rowN - 1) / 2) * 0.42;
+          const sx = Math.sin(th) * b[2] * 0.95, sy = b[1] + Math.cos(th) * b[3] * 0.95;
+          const g = coneGeo(0.07, 0.12, 6).translate(0, 0.05, 0);
+          g.rotateZ(-th); g.translate(sx, sy, z);
+          studs.push(g);
+        }
+        for (const sd of [-1, 1]) {
+          const g = coneGeo(0.06, 0.32, 6).translate(0, 0.16, 0);
+          g.rotateZ(-sd * Math.PI / 2 + sd * 0.25); g.translate(sd * b[2] * 0.98, b[1] - b[4] * 0.1, z);
+          spikes.push(g);
+        }
+      }
+      const studMesh = new THREE.Mesh(mergeGeos(studs.concat(spikes)), bonesM);
+      studMesh.position.copy(rootBone.userData.pos).negate();
+      rootBone.add(studMesh);
+      // tail club
+      const last = this.tail[this.tail.length - 1];
+      const club = new THREE.Mesh(new THREE.SphereGeometry(0.32, 14, 10), new THREE.MeshStandardMaterial({ map: mat.map, normalMap: mat.normalMap, roughness: 0.6 }));
+      club.scale.set(1.3, 0.6, 0.9);
+      const zc = st[0][0] + 0.25;
+      attach(last, club, new THREE.Vector3(0, atZ(st, zc)[1], zc));
+    }
+
+    this.pivot.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
 
     // ---- state ----
     this.pos = new THREE.Vector3();
@@ -811,6 +904,10 @@ export class Dino {
     const leanT = spec.kind === 'biped' ? Math.min(k, 1) * 0.12 : 0;
     this.lean += (leanT - this.lean) * Math.min(1, dt * 3);
     this.pivot.rotation.x = this.lean + this.bodyPitch;
+    // weight shift from foot to foot
+    const kk = Math.min(k, 1);
+    this.pivot.rotation.z = Math.sin(ph) * (spec.kind === 'biped' ? 0.035 : 0.02) * kk;
+    this.pivot.rotation.y = Math.sin(ph) * 0.025 * kk;
 
     // legs
     for (const l of this.legs) {
@@ -824,9 +921,11 @@ export class Dino {
         l.ankle.rotation.x = l.a[2] - lift * A * 1.1;
         if (l.toe) l.toe.rotation.x = -(l.hip.rotation.x + l.knee.rotation.x + l.ankle.rotation.x) + lift * A * 0.8;
       } else {
-        l.hip.rotation.x = l.a[0] - A * s;
+        // front legs hang from the chest bone: cancel its tilt so they stay planted
+        const ct = l.front ? this.chest.rotation.x : 0;
+        l.hip.rotation.x = l.a[0] - A * s - ct;
         l.knee.rotation.x = l.a[1] + lift * A * (l.front ? -0.9 : 1.1);
-        l.ankle.rotation.x = -(l.hip.rotation.x + l.knee.rotation.x);
+        l.ankle.rotation.x = -(l.hip.rotation.x + l.knee.rotation.x + ct);
       }
     }
     if (this.arms) for (const a of this.arms) {
@@ -837,7 +936,7 @@ export class Dino {
     const tn = this.tail.length;
     this.tail.forEach((b, i) => {
       const w = (i + 1) / tn;
-      b.rotation.y = Math.sin(this.time * (1.1 + k) - i * 0.7) * (0.05 + 0.05 * k) * w * 2;
+      b.rotation.y = Math.sin(this.time * (1.1 + k) - i * 0.7) * (0.05 + 0.03 * k) * w * 2 - Math.sin(ph - i * 0.4) * 0.05 * Math.min(k, 1) * w;
       b.rotation.x = Math.sin(this.time * 0.9 - i * 0.5) * 0.02 + (k > 0.5 ? -0.02 : 0.015 * w);
     });
     // look / neck
@@ -851,8 +950,9 @@ export class Dino {
       const dx = loc.x - nb.x, dy = loc.y - nb.y, dz = loc.z - nb.z;
       const restA = Math.atan2(hp.y - nb.y, hp.z - nb.z);
       yaw = clamp(Math.atan2(dx, dz), -1.3, 1.3) * this.lookW;
-      pitch = clamp(-(Math.atan2(dy, Math.hypot(dx, dz)) - restA), -0.9, 0.9) * this.lookW * (spec.lookPitch ?? 1);
+      pitch = clamp(-(Math.atan2(dy, Math.hypot(dx, dz)) - restA), -0.9, 0.9) * this.lookW * (this.lookPitchMul ?? spec.lookPitch ?? 1);
     }
+    yaw += this.extraYaw || 0;
     // roar overrides
     let roarLift = 0, shake = 0;
     if (this.roarT > 0) {
@@ -865,15 +965,19 @@ export class Dino {
     }
     const sm = Math.min(1, dt * 4);
     this.yawN += (yaw - this.yawN) * sm;
-    this.pitchN += (pitch + roarLift + this.headDip - this.pitchN) * sm;
+    this.pitchN += (pitch + roarLift - this.pitchN) * sm;
+    this.dipN = (this.dipN || 0) + ((this.headDip || 0) - (this.dipN || 0)) * Math.min(1, dt * 2.5);
     const nn = this.neck.length + 1;
-    for (const b of this.neck) {
+    // lowering the head (grazing, drinking, feeding) bends mostly at the base of the neck
+    const dip = this.dipN, wSum = nn * (nn + 1) / 2;
+    this.neck.forEach((b, i) => {
       b.rotation.y = this.yawN / nn + shake;
-      b.rotation.x = this.pitchN / nn;
-    }
+      b.rotation.x = this.pitchN / nn + dip * 0.75 * (nn - i) / wSum;
+    });
     this.chest.rotation.y = this.yawN * 0.15;
+    this.chest.rotation.x = dip * 0.3;
     this.headBone.rotation.y = this.yawN / nn;
-    this.headBone.rotation.x = this.pitchN / nn;
+    this.headBone.rotation.x = this.pitchN / nn + dip * 0.75 / wSum - dip * 0.12 - Math.cos(this.phase * 2) * 0.03 * Math.min(k, 1) + (this.chew ? Math.sin(this.time * 9) * 0.04 * this.chew : 0);
     // jaw
     this.jawOpen += (this.jawTarget - this.jawOpen) * Math.min(1, dt * (this.jawTarget > this.jawOpen ? 14 : 6));
     this.jaw.rotation.x = this.jawOpen * spec.jaw.open + Math.max(0, Math.sin(this.time * 0.7)) * 0.02;

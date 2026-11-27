@@ -177,7 +177,11 @@ export class Track {
         let nv = Math.sqrt(Math.max(v2, 0.01));
         const z = this.zone[j];
         if (z === 1) nv = 2.6;
-        else if (z === 2) nv = 4.8;
+        else if (z === 2) {
+          // chain lift: the cart coasts up the slope under gravity plus gentle trim
+          // fins (about 0.25 g) until it slows to chain speed, so there is no sudden stop
+          nv = Math.max(5.2, Math.sqrt(Math.max(v2 - 2 * 2.4 * ds, 0)));
+        }
         else if (z === 3) nv = 12.5;
         else if (z === 4) nv = Math.min(30, Math.sqrt(v * v + 2 * 14 * ds));
         else if (z === 6) nv = Math.max(14, Math.min(nv, Math.sqrt(Math.max(v * v - 2 * 6 * ds, 0))));
