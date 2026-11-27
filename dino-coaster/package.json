@@ -1,0 +1,1 @@
+{ "type": "module", "private": true, "description": "lets node run these browser modules (used by unity-dino-rush/tools/export-from-web.mjs)" }

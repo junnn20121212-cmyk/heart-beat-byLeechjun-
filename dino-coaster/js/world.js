@@ -73,7 +73,9 @@ export class World {
     return h;
   }
 
-  buildTerrain() {
+  // pure height computation (no rendering) so it can also be exported for Unity
+  computeGrid() {
+    if (this.grid) return;
     const N = RES + 1;
     const grid = new Float32Array(N * N);
     this.carve = new Float32Array(N * N);
@@ -98,6 +100,11 @@ export class World {
     }
     this.grid = grid;
     this.N = N;
+  }
+
+  buildTerrain() {
+    this.computeGrid();
+    const N = this.N, grid = this.grid;
 
     const geo = new THREE.PlaneGeometry(HALF * 2, HALF * 2, RES, RES);
     geo.rotateX(-Math.PI / 2);

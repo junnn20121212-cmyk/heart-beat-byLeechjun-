@@ -1,0 +1,20 @@
+{
+ "size": 1400,
+ "resolution": 513,
+ "minHeight": -6,
+ "maxHeight": 198,
+ "waterLevel": 0,
+ "lake": {
+  "x": 45,
+  "z": -92,
+  "r": 34
+ },
+ "lineup": {
+  "x": -60,
+  "z": -105
+ },
+ "volcano": {
+  "x": 470,
+  "z": 330
+ }
+}
