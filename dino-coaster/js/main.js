@@ -77,6 +77,39 @@ class Particles {
   }
 }
 
+// ---------------- floating dust motes around the viewer (cinematic air) ----------------
+function makeDust() {
+  const N = Q.high ? 500 : 250, R = 14;
+  const pos = new Float32Array(N * 3), seed = new Float32Array(N);
+  for (let i = 0; i < N; i++) { pos[i * 3] = (Math.random() - 0.5) * 2 * R; pos[i * 3 + 1] = (Math.random() - 0.5) * 2 * R * 0.5; pos[i * 3 + 2] = (Math.random() - 0.5) * 2 * R; seed[i] = Math.random() * 10; }
+  const g = new THREE.BufferGeometry();
+  const world = new Float32Array(N * 3);
+  g.setAttribute('position', new THREE.BufferAttribute(world, 3));
+  const m = new THREE.PointsMaterial({ size: 0.06, map: TX.makeSoftDot(32), color: 0xe8d7b0, transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending });
+  const points = new THREE.Points(g, m);
+  points.frustumCulled = false;
+  let t = 0;
+  return {
+    points,
+    update(c, dt, v) {
+      t += dt;
+      for (let i = 0; i < N; i++) {
+        pos[i * 3] += Math.sin(t * 0.3 + seed[i]) * dt * 0.15;
+        pos[i * 3 + 1] += Math.cos(t * 0.23 + seed[i] * 2) * dt * 0.08;
+        for (let k = 0; k < 3; k++) {
+          const lim = k === 1 ? R * 0.5 : R;
+          // motes live in world space; wrap them into a box around the viewer
+          const rel = pos[i * 3 + k] - c.getComponent(k);
+          const local = ((rel % (2 * lim)) + 3 * lim) % (2 * lim) - lim;
+          world[i * 3 + k] = c.getComponent(k) + local;
+        }
+      }
+      g.attributes.position.needsUpdate = true;
+      m.opacity = 0.55 * Math.max(0.2, 1 - v / 25);
+    },
+  };
+}
+
 // ---------------- floating text sign (works in VR) ----------------
 class Billboard {
   constructor() {
@@ -115,7 +148,7 @@ const app = {
   muted: false,
 };
 
-let renderer, scene, camera, track, world, director, audio, stereo, gyro, particles, carts, billboard, headlight, lapS0;
+let menuCam, dust, renderer, scene, camera, track, world, director, audio, stereo, gyro, particles, carts, billboard, headlight, lapS0;
 const smp = { p: new THREE.Vector3(), t: new THREE.Vector3(), r: new THREE.Vector3(), u: new THREE.Vector3() };
 const smp2 = { p: new THREE.Vector3(), t: new THREE.Vector3(), r: new THREE.Vector3(), u: new THREE.Vector3() };
 
@@ -131,7 +164,7 @@ async function init() {
   renderer.setPixelRatio(app.pr);
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.0;
+  renderer.toneMappingExposure = 0.95;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -189,6 +222,9 @@ async function init() {
   camera.add(billboard.mesh);
 
   stereo = new StereoRenderer(renderer, Q.high);
+  menuCam = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.1, 4000);
+  dust = makeDust();
+  scene.add(dust.points);
   gyro = new Gyro();
 
   placeCart(lapS0);
@@ -410,7 +446,25 @@ function loop(now) {
   headlight.intensity = inTunnel ? 45 : 0;
   world.hemiFactor = inTunnel ? 0.12 : 1;
   const _t0 = performance.now();
+  if (app.state === 'menu') {
+    // slow cinematic dolly in front of the five-dinosaur line-up
+    const c = director.lineupCenter;
+    const aspect = window.innerWidth / window.innerHeight;
+    const wide = aspect > 1.2;
+    const shift = 0;
+    const halfW = wide ? 17.5 : 12;
+    const vfov = THREE.MathUtils.degToRad(menuCam.fov);
+    const dist = Math.max(20, halfW / (Math.tan(vfov / 2) * aspect)) * (1 + Math.sin(time * 0.12) * 0.04);
+    const sway = Math.sin(time * 0.09) * 0.12;
+    menuCam.aspect = aspect; menuCam.updateProjectionMatrix();
+    const cx = c.x + 2.5 + shift;
+    menuCam.position.set(cx + Math.sin(sway) * dist, c.y + 1.4, c.z + Math.cos(sway) * dist);
+    menuCam.lookAt(cx, c.y + (wide ? 2.6 : 1.5), c.z);
+    menuCam.updateMatrixWorld();
+    director.menuCam = menuCam.position;
+  } else director.menuCam = null;
   director.update(dt, { s: app.s, v: app.v, cam: camWorld, fwd, time });
+  dust.update(app.state === 'menu' ? menuCam.position : camWorld, dt, app.v);
   app.tDirector = performance.now() - _t0;
   particles.update(dt);
   // splash when skimming the river
@@ -450,6 +504,7 @@ function loop(now) {
   const _t1 = performance.now();
   if (window.__dino && window.__dino.debugCam) renderer.render(scene, window.__dino.debugCam);
   else if (app.mode === 'vr' && app.state !== 'menu') stereo.render(scene, camera, app.fx);
+  else if (app.state === 'menu') { world.followSun(director.lineupCenter); renderer.render(scene, menuCam); }
   else renderer.render(scene, camera);
 
   app.tRender = performance.now() - _t1;

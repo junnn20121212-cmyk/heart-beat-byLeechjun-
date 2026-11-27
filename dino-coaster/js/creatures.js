@@ -156,7 +156,7 @@ function eyeMat(iris) {
 export const SPECIES = {
   rex: {
     kind: 'biped', runSpeed: 9, hipHeight: 0, // computed
-    skin: { seed: 1, base: [128, 94, 58], dark: [58, 42, 26], belly: [210, 190, 150], stripeFreq: 26, stripeAmt: 0.75, mottle: 0.6 },
+    skin: { seed: 1, base: [108, 104, 76], dark: [60, 58, 42], belly: [170, 160, 128], stripeFreq: 22, stripeAmt: 0.14, mottle: 0.75, wrinkle: 0.9, backDark: 0.45 },
     body: [
       [-7.4, 0.4, 0.03, 0.03, 0.03], [-6.4, 0.38, 0.13, 0.14, 0.14], [-5.0, 0.3, 0.26, 0.29, 0.28],
       [-3.5, 0.2, 0.42, 0.46, 0.47], [-2.0, 0.12, 0.6, 0.64, 0.68], [-0.6, 0.06, 0.76, 0.8, 0.88],
@@ -183,11 +183,11 @@ export const SPECIES = {
   },
 };
 
-SPECIES.rex2 = { ...SPECIES.rex, skin: { seed: 2, base: [104, 108, 84], dark: [50, 54, 40], belly: [178, 172, 142], stripeFreq: 18, stripeAmt: 0.45, spotAmt: 0.45, spotFreq: 18, mottle: 0.8 } };
+SPECIES.rex2 = { ...SPECIES.rex, skin: { seed: 2, base: [100, 90, 68], dark: [54, 48, 36], belly: [162, 150, 122], stripeFreq: 18, stripeAmt: 0.12, spotAmt: 0.15, spotFreq: 18, mottle: 0.8, wrinkle: 0.9, backDark: 0.45 } };
 
 SPECIES.carno = {
   kind: 'biped', runSpeed: 10,
-  skin: { seed: 5, base: [142, 137, 126], dark: [62, 58, 54], belly: [218, 212, 200], stripeFreq: 30, stripeAmt: 0.7, stripeSharp: 0.6, spotAmt: 0.55, spotFreq: 34, mottle: 0.9, backDark: 0.5 },
+  skin: { seed: 5, base: [126, 120, 104], dark: [64, 60, 52], belly: [190, 184, 166], stripeFreq: 30, stripeAmt: 0.3, stripeSharp: 0.6, spotAmt: 0.35, spotFreq: 34, mottle: 0.9, backDark: 0.45, wrinkle: 0.7 },
   body: [
     [-5.2, 0.3, 0.02, 0.02, 0.02], [-4.4, 0.3, 0.09, 0.1, 0.1], [-3.4, 0.24, 0.18, 0.2, 0.2],
     [-2.3, 0.16, 0.3, 0.33, 0.34], [-1.2, 0.08, 0.42, 0.46, 0.5], [-0.2, 0.04, 0.52, 0.55, 0.64],
@@ -214,7 +214,7 @@ SPECIES.carno = {
 
 SPECIES.spino = {
   kind: 'biped', runSpeed: 7,
-  skin: { seed: 9, base: [80, 90, 66], dark: [36, 42, 34], belly: [196, 184, 150], accent: [62, 104, 128], accentAmt: 0.85, stripeFreq: 14, stripeAmt: 0.45, mottle: 0.8 },
+  skin: { seed: 9, base: [92, 94, 72], dark: [48, 50, 40], belly: [176, 166, 138], accent: [72, 92, 98], accentAmt: 0.35, stripeFreq: 14, stripeAmt: 0.2, mottle: 0.8, wrinkle: 0.7 },
   body: [
     [-8.6, 0.3, 0.03, 0.12, 0.1], [-7.4, 0.32, 0.1, 0.45, 0.4], [-6.0, 0.3, 0.18, 0.55, 0.5],
     [-4.4, 0.22, 0.3, 0.55, 0.55], [-2.6, 0.12, 0.5, 0.62, 0.68], [-1.0, 0.06, 0.68, 0.74, 0.86],
@@ -242,7 +242,7 @@ SPECIES.spino = {
 
 SPECIES.raptor = {
   kind: 'biped', runSpeed: 12,
-  skin: { seed: 13, base: [176, 112, 62], dark: [72, 42, 22], belly: [218, 198, 162], stripeFreq: 16, stripeAmt: 0.8, mottle: 0.5, rough: 0.8 },
+  skin: { seed: 13, base: [168, 152, 128], dark: [98, 86, 70], belly: [208, 196, 172], stripeFreq: 16, stripeAmt: 0.22, mottle: 0.6, rough: 0.8, wrinkle: 0.6 },
   body: [
     [-2.1, 0.14, 0.01, 0.01, 0.01], [-1.7, 0.14, 0.05, 0.05, 0.05], [-1.1, 0.12, 0.09, 0.1, 0.1],
     [-0.5, 0.07, 0.15, 0.17, 0.18], [0.05, 0.03, 0.2, 0.22, 0.27], [0.45, 0.02, 0.21, 0.22, 0.31],
@@ -265,12 +265,12 @@ SPECIES.raptor = {
   arm: { at: [0.13, -0.12, 0.75], len: [0.22, 0.2], r: 0.035, claws: 3, a: [-0.2, -1.2] },
   roarPitch: 2.4, roarSize: 0.5, screech: true,
 };
-SPECIES.raptor2 = { ...SPECIES.raptor, skin: { seed: 14, base: [150, 140, 128], dark: [64, 56, 50], belly: [210, 204, 194], accent: [170, 60, 55], accentAmt: 0.3, stripeFreq: 20, stripeAmt: 0.6, mottle: 0.6, rough: 0.8 } };
+SPECIES.raptor2 = { ...SPECIES.raptor, skin: { seed: 14, base: [150, 136, 114], dark: [86, 74, 60], belly: [200, 190, 168], stripeFreq: 20, stripeAmt: 0.25, mottle: 0.6, rough: 0.8, wrinkle: 0.6 } };
 
 // ---------------- quadrupeds ----------------
 SPECIES.brachio = {
   kind: 'quad', runSpeed: 3, H: 4.6,
-  skin: { seed: 21, base: [152, 114, 90], dark: [70, 50, 40], belly: [205, 186, 160], stripeFreq: 44, stripeAmt: 0.75, mottle: 0.5 },
+  skin: { seed: 21, base: [142, 128, 106], dark: [84, 74, 60], belly: [182, 170, 148], stripeFreq: 44, stripeAmt: 0.1, mottle: 0.6, wrinkle: 1.0 },
   body: [
     [-10.5, -1.4, 0.03, 0.03, 0.03], [-9.0, -1.15, 0.18, 0.2, 0.2], [-7.0, -0.6, 0.36, 0.4, 0.42], [-4.8, -0.05, 0.62, 0.7, 0.72],
     [-2.5, 0.35, 1.0, 1.0, 1.25], [0.0, 0.6, 1.42, 1.1, 1.65], [2.5, 1.2, 1.55, 1.1, 1.95], [4.5, 1.9, 1.38, 1.1, 1.8],
@@ -291,7 +291,7 @@ SPECIES.brachio = {
 
 SPECIES.stego = {
   kind: 'quad', runSpeed: 3, H: 2.3,
-  skin: { seed: 31, base: [96, 112, 64], dark: [50, 60, 34], belly: [204, 194, 152], spotAmt: 0.5, spotFreq: 26, stripeFreq: 10, stripeAmt: 0.15, mottle: 0.9 },
+  skin: { seed: 31, base: [104, 112, 74], dark: [60, 66, 42], belly: [180, 174, 140], spotAmt: 0.3, spotFreq: 26, stripeFreq: 10, stripeAmt: 0.1, mottle: 0.9, wrinkle: 0.8 },
   body: [
     [-4.6, -0.05, 0.03, 0.03, 0.03], [-3.8, 0.05, 0.12, 0.14, 0.14], [-2.6, 0.22, 0.28, 0.3, 0.33], [-1.3, 0.45, 0.5, 0.55, 0.62],
     [0.0, 0.55, 0.76, 0.75, 0.98], [1.3, 0.35, 0.8, 0.74, 1.02], [2.4, -0.1, 0.62, 0.58, 0.8], [3.2, -0.45, 0.34, 0.34, 0.38], [3.75, -0.62, 0.22, 0.22, 0.24],
@@ -311,7 +311,7 @@ SPECIES.stego = {
 
 SPECIES.trike = {
   kind: 'quad', runSpeed: 6, H: 2.15,
-  skin: { seed: 41, base: [116, 125, 72], dark: [66, 74, 40], belly: [196, 190, 144], stripeFreq: 12, stripeAmt: 0.3, mottle: 0.9 },
+  skin: { seed: 41, base: [112, 122, 74], dark: [70, 78, 46], belly: [168, 166, 124], stripeFreq: 12, stripeAmt: 0.14, mottle: 0.9, wrinkle: 0.9, frill: [196, 186, 140] },
   body: [
     [-3.8, 0.0, 0.03, 0.03, 0.03], [-3.0, 0.08, 0.15, 0.17, 0.17], [-1.9, 0.25, 0.42, 0.44, 0.48], [-0.8, 0.4, 0.78, 0.72, 0.9],
     [0.3, 0.45, 0.98, 0.84, 1.15], [1.5, 0.35, 0.98, 0.86, 1.2], [2.5, 0.15, 0.78, 0.72, 1.0], [3.1, 0.05, 0.47, 0.5, 0.55], [3.4, 0.0, 0.4, 0.42, 0.44],
@@ -328,7 +328,7 @@ SPECIES.trike = {
   front: { at: [0.62, -0.45, 2.5], frac: [0.52, 0.48], a: [0.2, -0.3], r: [0.36, 0.22, 0.21] },
   footH: 0.18, roarPitch: 0.9, roarSize: 1.1,
 };
-SPECIES.trike2 = { ...SPECIES.trike, skin: { seed: 42, base: [140, 98, 92], dark: [70, 48, 52], belly: [180, 166, 154], stripeFreq: 10, stripeAmt: 0.3, mottle: 1.0, accent: [180, 70, 80], accentAmt: 0.3 } };
+SPECIES.trike2 = { ...SPECIES.trike, skin: { seed: 42, base: [118, 112, 80], dark: [72, 68, 48], belly: [172, 164, 130], stripeFreq: 10, stripeAmt: 0.12, mottle: 1.0, wrinkle: 0.9, frill: [190, 170, 130] } };
 
 // ---------------- builder ----------------
 export class Dino {
@@ -541,13 +541,24 @@ export class Dino {
       m.position.set(f.at[0], f.at[1], f.at[2]);
       m.rotation.x = f.tilt;
       head.add(m);
+      // epoccipital knobs around the rim (as in the reference)
+      const knobs = [];
+      const nk = 15;
+      for (let i = 0; i < nk; i++) {
+        const a = Math.PI * (0.04 + 0.92 * i / (nk - 1));
+        const kg = coneGeo(0.1, 0.24, 7).translate(0, 0.1, 0);
+        kg.rotateZ(a - Math.PI / 2);
+        kg.translate(Math.cos(a) * W * 0.98, Math.sin(a) * Hh * 0.9 * 0.98 + 0.05, 0.05);
+        knobs.push(kg);
+      }
+      m.add(new THREE.Mesh(mergeGeos(knobs), C.horn));
     }
     if (spec.hornsT) {
       for (const sd of [-1, 1]) {
-        const g = coneGeo(0.1, 1.05, 10).translate(0, 0.52, 0);
+        const g = coneGeo(0.11, 1.25, 10).translate(0, 0.62, 0);
         const m = new THREE.Mesh(g, C.horn);
         m.position.set(sd * 0.24, 0.5, 0.3);
-        m.rotation.set(1.15, 0, -sd * 0.15);
+        m.rotation.set(0.95, 0, -sd * 0.22);
         head.add(m);
       }
       const n = new THREE.Mesh(coneGeo(0.08, 0.35, 8).translate(0, 0.17, 0), C.horn);
@@ -912,7 +923,8 @@ function frillTexture(skin) {
   const b = skin.base;
   ctx.fillStyle = `rgb(${b[0]},${b[1]},${b[2]})`; ctx.fillRect(0, 0, 256, 256);
   const g = ctx.createRadialGradient(128, 70, 10, 128, 70, 120);
-  g.addColorStop(0, 'rgba(225,150,140,0.95)'); g.addColorStop(0.6, 'rgba(190,110,100,0.6)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+  const fc = skin.frill || [225, 150, 140];
+  g.addColorStop(0, `rgba(${fc[0]},${fc[1]},${fc[2]},0.9)`); g.addColorStop(0.55, `rgba(${fc[0]},${fc[1]},${fc[2]},0.45)`); g.addColorStop(1, 'rgba(0,0,0,0)');
   ctx.fillStyle = g; ctx.fillRect(0, 0, 256, 256);
   for (let i = 0; i < 900; i++) {
     ctx.strokeStyle = 'rgba(30,25,15,0.25)';
@@ -928,13 +940,13 @@ export class Ptero {
   constructor() {
     this.root = new THREE.Group();
     const C = common();
-    const mat = skinMaterial('ptero', { seed: 51, base: [130, 110, 90], dark: [70, 55, 45], belly: [200, 190, 170], stripeFreq: 4, stripeAmt: 0.2 }, 3, 3);
+    const mat = skinMaterial('ptero', { seed: 51, base: [122, 98, 74], dark: [72, 56, 42], belly: [190, 172, 146], stripeFreq: 4, stripeAmt: 0.1, wrinkle: 0.5 }, 3, 3);
     const body = new THREE.Mesh(loft([[-0.7, 0, 0.02, 0.02, 0.02], [-0.4, 0, 0.12, 0.12, 0.14], [0.1, 0, 0.17, 0.17, 0.2], [0.45, 0.05, 0.12, 0.12, 0.12], [0.7, 0.12, 0.06, 0.06, 0.06]], { along: 14, around: 10 }), mat);
     this.root.add(body);
     const head = new THREE.Group();
     head.position.set(0, 0.14, 0.72);
     head.add(new THREE.Mesh(loft([[-0.35, 0.05, 0.03, 0.12, 0.02], [-0.1, 0.03, 0.07, 0.08, 0.05], [0.4, 0, 0.035, 0.04, 0.03], [0.9, -0.03, 0.01, 0.01, 0.01]], { along: 12, around: 8 }), mat));
-    const crest = new THREE.Mesh(coneGeo(0.05, 0.6, 6), mat);
+    const crest = new THREE.Mesh(coneGeo(0.07, 0.75, 6).scale(0.5, 1, 1.6), new THREE.MeshStandardMaterial({ color: 0xc98745, roughness: 0.55 }));
     crest.rotation.x = -1.9; crest.position.set(0, 0.12, -0.3);
     head.add(crest);
     this.root.add(head);
@@ -944,7 +956,7 @@ export class Ptero {
       const w = new THREE.Group();
       w.position.set(sd * 0.12, 0.05, 0.25);
       const s = new THREE.Shape();
-      s.moveTo(0, 0.15); s.lineTo(3.5, 0.05); s.quadraticCurveTo(2.0, -0.5, 0, -0.7); s.lineTo(0, 0.15);
+      s.moveTo(0, 0.35); s.quadraticCurveTo(1.8, 0.45, 3.6, 0.1); s.quadraticCurveTo(2.2, -0.6, 0.2, -1.1); s.lineTo(0, 0.35);
       const g = new THREE.ShapeGeometry(s);
       g.rotateX(Math.PI / 2);
       if (sd < 0) g.scale(-1, 1, 1);
@@ -959,7 +971,7 @@ export class Ptero {
   }
   update(dt, flap = 1) {
     this.t += dt;
-    const a = Math.sin(this.t * 3.2) * 0.45 * flap + 0.05;
+    const a = Math.sin(this.t * 3.2) * 0.45 * flap + 0.15;
     for (const { w, sd } of this.wings) w.rotation.z = sd * a;
   }
 }

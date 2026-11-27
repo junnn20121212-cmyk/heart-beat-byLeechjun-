@@ -9,6 +9,7 @@ const CELL = (HALF * 2) / RES;
 export const VOLCANO = { x: 470, z: -330 };
 const RIVER = [[760, 430], [520, 330], [330, 250], [230, 205], [165, 168], [128, 150], [92, 126], [62, 106]];
 const LAKE = { x: 45, z: 92, r: 34 };
+export const LINEUP = { x: -60, z: 105 };
 
 function distToPolyline(x, z, pts) {
   let best = 1e9;
@@ -35,6 +36,16 @@ export class World {
   }
 
   baseHeight(x, z) {
+    const h0 = this.rawHeight(x, z);
+    const dl = Math.hypot(x - LINEUP.x, z - LINEUP.z);
+    if (dl < 45) {
+      if (this.padH === undefined) this.padH = this.rawHeight(LINEUP.x, LINEUP.z);
+      return lerp(this.padH, h0, smoothstep(24, 45, dl));
+    }
+    return h0;
+  }
+
+  rawHeight(x, z) {
     let h = 7.5 + 6 * fbm(this.n1, x * 0.005, z * 0.005, 5) + 3.5 * fbm(this.n2, x * 0.016, z * 0.016, 3);
     const r = Math.hypot(x, z);
     const m = smoothstep(330, 650, r);
@@ -123,6 +134,8 @@ export class World {
       const volc = (1 - smoothstep(120, 260, dv)) * smoothstep(20, 60, h);
       r = lerp(r, 0.17, volc); g = lerp(g, 0.15, volc); b = lerp(b, 0.14, volc);
       // banks / underwater
+      const dust = 1 - smoothstep(14, 30, Math.hypot(x - LINEUP.x, z - LINEUP.z) + n2 * 6);
+      r = lerp(r, 0.47, dust); g = lerp(g, 0.40, dust); b = lerp(b, 0.31, dust);
       const sand = 1 - smoothstep(0.6, 2.2, h);
       r = lerp(r, 0.42, sand); g = lerp(g, 0.37, sand); b = lerp(b, 0.26, sand);
       if (h < -0.3) { const u = smoothstep(-0.3, -3, h); r = lerp(r, 0.18, u); g = lerp(g, 0.17, u); b = lerp(b, 0.12, u); }
@@ -169,8 +182,8 @@ export class World {
       void main(){
         vec3 d = normalize(vDir);
         float h = d.y;
-        vec3 zenith = vec3(0.10, 0.24, 0.55);
-        vec3 horizon = vec3(0.62, 0.66, 0.70);
+        vec3 zenith = vec3(0.14, 0.24, 0.42);
+        vec3 horizon = vec3(0.62, 0.60, 0.54);
         vec3 col = mix(horizon, zenith, pow(clamp(h, 0.0, 1.0), 0.45));
         if (h < 0.0) col = mix(horizon, horizon * 0.75, clamp(-h * 5.0, 0.0, 1.0));
         float sd = max(dot(d, sunDir), 0.0);
@@ -214,8 +227,8 @@ export class World {
     renderer.toneMapping = tm;
     pm.dispose();
 
-    const horizon = new THREE.Color(0.62, 0.66, 0.70);
-    this.scene.fog = new THREE.FogExp2(horizon, 0.0021);
+    const horizon = new THREE.Color(0.62, 0.60, 0.54);
+    this.scene.fog = new THREE.FogExp2(horizon, 0.0026);
     this.scene.background = horizon;
 
     // lights

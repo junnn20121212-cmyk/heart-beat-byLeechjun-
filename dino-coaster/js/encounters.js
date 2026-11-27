@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { Dino, Ptero } from './creatures.js';
 import { clamp, lerp, rng } from './noise.js';
+import { LINEUP } from './world.js';
 
 const smp = () => ({ p: new THREE.Vector3(), t: new THREE.Vector3(), r: new THREE.Vector3(), u: new THREE.Vector3() });
 
@@ -191,13 +192,44 @@ export class Director {
       this.scene.add(p.root);
       this.swoop = { p, sAt: T.sOf('liftStart') + 70, done: false, t: -1 };
     }
+    this.buildLineup();
   }
 
   clearVegetation() {
+    this.world.clearAround(LINEUP.x, LINEUP.z + 6, 28);
+    this.world.clearAround(LINEUP.x - 3, LINEUP.z + 40, 30);
     for (const a of this.actors) {
       const d = a.d, sc = d.scale || 1;
       this.world.clearAround(d.pos.x, d.pos.z, (d.spec.kind === 'quad' ? 9 : 7) * sc);
     }
+  }
+
+  // The five-dinosaur line-up from the reference picture (menu backdrop)
+  buildLineup() {
+    const C = LINEUP;
+    this.lineupCenter = new THREE.Vector3(C.x, this.ground(C.x, C.z), C.z);
+    const cast = [['raptor2', -10, 1.6, 0.45], ['trike', -4.8, 1.0, 0.35], ['rex', 1.6, 0.95, 0.12], ['brachio', 8.6, 0.6, -0.45]];
+    this.lineup = [];
+    for (const [k, dx, sc, hd] of cast) {
+      const d = this.add(k, sc);
+      const x = C.x + dx, z = C.z;
+      d.place(x, this.ground(x, z), z, hd);
+      const actor = {
+        d, lineup: true,
+        update: (dt, st) => {
+          d.speed = 0;
+          const target = this.menuCam || st.cam;
+          d.look = target; d.lookW = Math.min(0.85, d.lookW + dt * 0.5);
+          d.headDip = 0;
+        },
+      };
+      this.actors.push(actor);
+      this.lineup.push(d);
+    }
+    const p = new Ptero();
+    p.root.scale.setScalar(1.7);
+    this.scene.add(p.root);
+    this.lineupPtero = { p, x: C.x + 12, z: C.z + 4, y: this.ground(C.x + 12, C.z) + 6.5, t: 0 };
   }
 
   // ----- behaviours -----
@@ -543,6 +575,12 @@ export class Director {
       if (d.key === 'spino') { if (!near) d.root.visible = false; }
       else d.root.visible = near;
       if (d.root.visible) d.update(dt);
+    }
+    if (this.lineupPtero) {
+      const L = this.lineupPtero; L.t += dt;
+      L.p.root.position.set(L.x, L.y + Math.sin(L.t * 1.6) * 0.5, L.z);
+      L.p.root.rotation.set(-0.55, -0.3, Math.sin(L.t * 0.8) * 0.05);
+      L.p.update(dt, 0.7);
     }
     // pteranodons
     for (const P of this.pteros) {

@@ -346,6 +346,13 @@ export function makeSkinTexture(p, W = 1024, H = 512) {
       const dk = clamp(stripe + spot + smoothstep(0.75, 1.0, dorsal) * (p.backDark ?? 0.35), 0, 1);
       cr = lerp(cr, dark[0], dk); cg = lerp(cg, dark[1], dk); cb = lerp(cb, dark[2], dk);
       cr = lerp(cr, belly[0], bellyMix); cg = lerp(cg, belly[1], bellyMix); cb = lerp(cb, belly[2], bellyMix);
+      // skin folds / wrinkles (cinematic, less cartoony)
+      if (p.wrinkle) {
+        const fold = Math.pow(Math.abs(Math.sin((u * 140 + (n - 0.5) * 6 + Math.sin(v * 31) * 0.4) * Math.PI)), 14);
+        const fine = Math.pow(Math.abs(Math.sin((u * 420 + nf * 3 + v * 7) * Math.PI)), 20);
+        const k = p.wrinkle * (0.22 * fold * smoothstep(0.3, 0.7, n) + 0.1 * fine);
+        cr *= 1 - k; cg *= 1 - k; cb *= 1 - k;
+      }
       // large-scale mottling + fine scale speckle
       const m = 0.82 + 0.36 * (n - 0.5) * 2 * (p.mottle ?? 0.5) + (nf - 0.5) * 0.35 + (r() - 0.5) * 0.06;
       const i = (y * W + x) * 4;
