@@ -225,6 +225,7 @@ async function init() {
   setProgress(0.5, '정글 식생 심는 중');
   await nextFrame();
   world.buildVegetation();
+  world.clearCave();
 
   setProgress(0.62, '공룡 피부 · 골격 생성 중');
   await nextFrame();
@@ -590,8 +591,9 @@ function loop(now) {
   // ---- world ----
   world.update(dt);
   world.followSun(smp.p);
-  headlight.intensity = inTunnel ? 45 : 0;
+  headlight.intensity = inTunnel ? 30 : 0;
   world.hemiFactor = inTunnel ? 0.12 : 1;
+  world.updateCave(dt, app.s, camWorld, smp.t, audio);
   const _t0 = performance.now();
   if (app.state === 'menu') {
     // slow cinematic dolly in front of the five-dinosaur line-up

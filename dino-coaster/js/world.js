@@ -610,79 +610,378 @@ export class World {
 
   // ------- Rock tunnel -------
   buildTunnel() {
-    const tr = this.track;
+    const tr = this.track, hi = this.q.high;
     const [s0, s1] = [tr.sOf('tunnelIn') - 4, tr.sOf('tunnelOut') + 2];
+    const len = s1 - s0, sMid = (s0 + s1) / 2;
     const tex = TX.makeRockTextures(61, [0.42, 0.38, 0.33]);
     tex.map.repeat.set(10, 2); tex.normal.repeat.set(10, 2);
-    const innerMat = new THREE.MeshStandardMaterial({ map: tex.map, normalMap: tex.normal, roughness: 0.95, side: THREE.BackSide, envMapIntensity: 0.08 });
-    const outerMat = new THREE.MeshStandardMaterial({ map: tex.map, normalMap: tex.normal, roughness: 0.95 });
     const smp = { p: new THREE.Vector3(), t: new THREE.Vector3(), r: new THREE.Vector3(), u: new THREE.Vector3() };
-    const ringN = 18, step = 1.0;
-    const rings = Math.floor((s1 - s0) / step) + 1;
-    const n = this.n2;
-    const mk = (radiusFn, a0, a1) => {
-      const pos = [], uv = [], idx = [];
+    const n = this.n2, n3 = this.n3;
+    // the passage swells into a tall cavern in the middle
+    const cavern = s => Math.exp(-(((s - sMid) / (len * 0.18)) ** 2));
+    const ringN = hi ? 44 : 28, step = hi ? 0.5 : 0.8;
+    const rings = Math.floor(len / step) + 1;
+    const frame = (s) => { tr.sample(s, smp); return smp; };
+    // craggy wall radius: big lumps + ledges + small crumbs, flatter floor
+    const wallR = (a, s) => {
+      const c = cavern(s);
+      let r = 3.1 + c * 3.2 + 0.55 * n(a * 2.2, s * 0.25) + 0.25 * n3(a * 6 + 3, s * 0.9) + 0.08 * n(a * 17, s * 3);
+      const up = Math.sin(a);
+      if (up > 0.2) r += c * 2.2 * up;           // vaulted cavern ceiling
+      if (up < -0.35) r = Math.min(r, 2.0 / Math.max(0.35, -up)); // keep a flat-ish floor
+      return r;
+    };
+    // ---- inner rock shell with vertex colours (moss at the mouths, wet streaks, dark cracks) ----
+    {
+      const pos = [], uv = [], col = [], idx = [];
+      const a0 = -0.28 * Math.PI, a1 = 1.28 * Math.PI;
       for (let k = 0; k < rings; k++) {
         const s = s0 + k * step;
-        tr.sample(s, smp);
+        frame(s);
         const cx = smp.p.x + smp.u.x * 1.4, cy = smp.p.y + smp.u.y * 1.4, cz = smp.p.z + smp.u.z * 1.4;
+        const mouth = 1 - smoothstep(4, 14, Math.min(s - s0, s1 - s));
         for (let j = 0; j <= ringN; j++) {
           const a = a0 + (a1 - a0) * j / ringN;
-          const rad = radiusFn(a, s, k);
+          const rad = wallR(a, s);
           const ca = Math.cos(a), sa = Math.sin(a);
           pos.push(cx + (smp.r.x * ca + smp.u.x * sa) * rad, cy + (smp.r.y * ca + smp.u.y * sa) * rad, cz + (smp.r.z * ca + smp.u.z * sa) * rad);
-          uv.push(s / 6, j / ringN);
+          uv.push(s / 5, (a - a0) * rad / 25); // world-scale UVs so the rock doesn't stretch in the cavern
+          const crack = smoothstep(0.1, 0.6, n3(a * 6 + 3, s * 0.9)); // recesses are darker
+          const wet = smoothstep(0.55, 0.85, n(a * 0.6 + 40, s * 0.08) * 0.5 + 0.5) * smoothstep(-0.2, 0.6, sa);
+          let r = 0.62 - crack * 0.28, g = 0.58 - crack * 0.27, b = 0.53 - crack * 0.24;
+          r *= 1 - wet * 0.35; g *= 1 - wet * 0.3; b *= 1 - wet * 0.2;           // dark wet streaks
+          r = lerp(r, 0.3, mouth * 0.7); g = lerp(g, 0.42, mouth * 0.7); b = lerp(b, 0.2, mouth * 0.7); // moss
+          col.push(r, g, b);
         }
       }
       for (let k = 0; k < rings - 1; k++)
         for (let j = 0; j < ringN; j++) {
-          const a = k * (ringN + 1) + j, b = a + ringN + 1;
-          idx.push(a, b, a + 1, a + 1, b, b + 1);
+          const q = k * (ringN + 1) + j, w = q + ringN + 1;
+          idx.push(q, w, q + 1, q + 1, w, w + 1);
         }
       const g = new THREE.BufferGeometry();
       g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
       g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+      g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
       g.setIndex(idx);
       g.computeVertexNormals();
-      return g;
+      const cmap = tex.map.clone(), cnrm = tex.normal.clone();
+      cmap.repeat.set(2, 10); cnrm.repeat.set(2, 10); cmap.needsUpdate = cnrm.needsUpdate = true;
+      const mat = new THREE.MeshStandardMaterial({ map: cmap, normalMap: cnrm, normalScale: new THREE.Vector2(1.4, 1.4), vertexColors: true, roughness: 0.62, side: THREE.BackSide, envMapIntensity: 0.05 });
+      const m = new THREE.Mesh(g, mat);
+      m.receiveShadow = true;
+      this.scene.add(m);
+    }
+    // ---- outer hillside shell ----
+    {
+      const pos = [], uv = [], idx = [], N = 18, st = 1.0, R = Math.floor(len / st) + 1;
+      for (let k = 0; k < R; k++) {
+        const s = s0 + k * st; frame(s);
+        const cx = smp.p.x + smp.u.x * 1.4, cy = smp.p.y + smp.u.y * 1.4, cz = smp.p.z + smp.u.z * 1.4;
+        const end = Math.min(k, R - 1 - k);
+        for (let j = 0; j <= N; j++) {
+          const a = -0.3 * Math.PI + 1.6 * Math.PI * j / N;
+          const rad = wallR(a, s) + 0.4 + Math.min(end * 0.6, 1) * (4 + 3 * (n(a * 1.3 + 9, s * 0.05) * 0.5 + 0.5));
+          const ca = Math.cos(a), sa = Math.sin(a);
+          pos.push(cx + (smp.r.x * ca + smp.u.x * sa) * rad, cy + (smp.r.y * ca + smp.u.y * sa) * rad, cz + (smp.r.z * ca + smp.u.z * sa) * rad);
+          uv.push(s / 6, j / N);
+        }
+      }
+      for (let k = 0; k < R - 1; k++) for (let j = 0; j < N; j++) { const q = k * (N + 1) + j, w = q + N + 1; idx.push(q, w, q + 1, q + 1, w, w + 1); }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+      g.setIndex(idx); g.computeVertexNormals();
+      const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ map: tex.map, normalMap: tex.normal, roughness: 0.95 }));
+      m.castShadow = true; m.receiveShadow = true;
+      this.scene.add(m);
+    }
+    const rnd = rng(404);
+    const wallPoint = (s, a, inset = 0) => {
+      frame(s);
+      const rad = wallR(a, s) - inset;
+      const ca = Math.cos(a), sa = Math.sin(a);
+      return new THREE.Vector3(
+        smp.p.x + smp.u.x * 1.4 + (smp.r.x * ca + smp.u.x * sa) * rad,
+        smp.p.y + smp.u.y * 1.4 + (smp.r.y * ca + smp.u.y * sa) * rad,
+        smp.p.z + smp.u.z * 1.4 + (smp.r.z * ca + smp.u.z * sa) * rad);
     };
-    const inner = mk((a, s) => 3.0 + 0.35 * n(a * 2, s * 0.3) + (Math.sin(a) < -0.3 ? -0.2 : 0), -0.25 * Math.PI, 1.25 * Math.PI);
-    const outer = mk((a, s, k) => {
-      const end = Math.min(k, rings - 1 - k);
-      return 3.3 + Math.min(end * 0.6, 1) * (3.5 + 2.5 * (n(a * 1.3 + 9, s * 0.05) * 0.5 + 0.5));
-    }, -0.3 * Math.PI, 1.3 * Math.PI);
-    const mi = new THREE.Mesh(inner, innerMat), mo = new THREE.Mesh(outer, outerMat);
-    mi.receiveShadow = true; mo.castShadow = true; mo.receiveShadow = true;
-    this.scene.add(mi, mo);
-    // torches + glowing eyes in the dark
+    // ---- stalactites and stalagmites ----
+    {
+      const parts = [];
+      const cone = (r, h) => { const g = new THREE.ConeGeometry(r, h, 7, 3); const p = g.attributes.position; for (let i = 0; i < p.count; i++) { const y = p.getY(i); const w = 1 + 0.25 * Math.sin(y * 9 + i); p.setX(i, p.getX(i) * w); p.setZ(i, p.getZ(i) * w); } return g; };
+      const nT = hi ? 170 : 90;
+      for (let i = 0; i < nT; i++) {
+        const s = s0 + 3 + rnd() * (len - 6);
+        const a = Math.PI * (0.18 + rnd() * 0.64);         // ceiling
+        const c = cavern(s);
+        const h = (0.35 + rnd() * 0.9) * (1 + c * 2.2);
+        const base = wallPoint(s, a, 0.15);
+        // keep the dynamic envelope clear: tip must stay > 1.7 m from the passage centre
+        frame(s);
+        const centre = smp.p.clone().addScaledVector(smp.u, 1.4);
+        const maxH = Math.max(0, base.distanceTo(centre) - 1.9);
+        const hh = Math.min(h, maxH);
+        if (hh < 0.2) continue;
+        const g = cone(0.06 + hh * 0.09, hh);
+        g.rotateX(Math.PI); g.translate(0, -hh / 2, 0); // hang down
+        const dir = centre.clone().sub(base).normalize();
+        g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, -1, 0), new THREE.Vector3(dir.x * 0.25, -1, dir.z * 0.25).normalize()));
+        g.translate(base.x, base.y, base.z);
+        parts.push(g);
+      }
+      const nM = hi ? 90 : 45;
+      for (let i = 0; i < nM; i++) {
+        const s = s0 + 3 + rnd() * (len - 6);
+        const side = rnd() < 0.5 ? -1 : 1;
+        const a = side > 0 ? -0.12 * Math.PI - rnd() * 0.1 : Math.PI * 1.12 + rnd() * 0.1; // lower side walls
+        const base = wallPoint(s, a, 0.1);
+        const h = (0.3 + rnd() * 0.8) * (1 + cavern(s) * 1.5);
+        const g = cone(0.1 + h * 0.13, h);
+        g.translate(base.x, base.y + h / 2 - 0.1, base.z);
+        parts.push(g);
+      }
+      const geo = mergeGeos(parts);
+      geo.computeVertexNormals();
+      const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0xb8ab94, roughness: 0.35, map: tex.map, envMapIntensity: 0.1 }));
+      m.castShadow = false; m.receiveShadow = true;
+      this.scene.add(m);
+    }
+    // ---- glowing crystals and mushrooms in the cavern ----
+    this.caveGlow = [];
+    {
+      const cryMat = new THREE.MeshStandardMaterial({ color: 0x7fd8ff, emissive: 0x2a9cff, emissiveIntensity: 2.2, roughness: 0.15, metalness: 0.1, transparent: true, opacity: 0.9 });
+      const cryMat2 = new THREE.MeshStandardMaterial({ color: 0xd9a0ff, emissive: 0x9a3cff, emissiveIntensity: 2.0, roughness: 0.15, transparent: true, opacity: 0.9 });
+      const mushMat = new THREE.MeshStandardMaterial({ color: 0x9cffb0, emissive: 0x24d860, emissiveIntensity: 1.6, roughness: 0.5 });
+      const partsA = [], partsB = [], partsM = [];
+      const nC = hi ? 26 : 14;
+      for (let i = 0; i < nC; i++) {
+        const s = sMid + (rnd() - 0.5) * len * 0.42;
+        const a = rnd() < 0.5 ? -0.1 * Math.PI - rnd() * 0.12 : 1.1 * Math.PI + rnd() * 0.12;
+        const base = wallPoint(s, a, 0.05);
+        const cluster = 3 + Math.floor(rnd() * 4);
+        for (let c = 0; c < cluster; c++) {
+          const h = 0.25 + rnd() * 0.6;
+          const g = new THREE.OctahedronGeometry(1, 0); g.scale(0.07 + h * 0.08, h, 0.07 + h * 0.08);
+          g.rotateZ((rnd() - 0.5) * 1.1); g.rotateX((rnd() - 0.5) * 1.1);
+          g.translate(base.x + (rnd() - 0.5) * 0.5, base.y + h * 0.6, base.z + (rnd() - 0.5) * 0.5);
+          (i % 3 ? partsA : partsB).push(g);
+        }
+        this.caveGlow.push({ p: base.clone().add(new THREE.Vector3(0, 0.5, 0)), c: i % 3 ? 0x3aa8ff : 0xa040ff });
+      }
+      for (let i = 0; i < (hi ? 40 : 20); i++) {
+        const s = s0 + 6 + rnd() * (len - 12);
+        const a = rnd() < 0.5 ? -0.16 * Math.PI : 1.16 * Math.PI;
+        const base = wallPoint(s, a, 0.05);
+        const stem = new THREE.CylinderGeometry(0.015, 0.02, 0.12, 5).translate(base.x, base.y + 0.06, base.z);
+        const cap = new THREE.SphereGeometry(0.06, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 0.6, 1).translate(base.x, base.y + 0.12, base.z);
+        partsM.push(stem, cap);
+      }
+      if (partsA.length) this.scene.add(new THREE.Mesh(mergeGeos(partsA), cryMat));
+      if (partsB.length) this.scene.add(new THREE.Mesh(mergeGeos(partsB), cryMat2));
+      if (partsM.length) this.scene.add(new THREE.Mesh(mergeGeos(partsM), mushMat));
+      this.animated.push(t => { cryMat.emissiveIntensity = 2.0 + Math.sin(t * 1.3) * 0.5; cryMat2.emissiveIntensity = 1.8 + Math.sin(t * 1.7 + 1) * 0.5; mushMat.emissiveIntensity = 1.4 + Math.sin(t * 2.3) * 0.3; });
+    }
+    // ---- fossil ribcage embedded in the cavern wall ----
+    {
+      const boneMat = new THREE.MeshStandardMaterial({ color: 0xd9ccb0, roughness: 0.6 });
+      const parts = [];
+      const sF = sMid + len * 0.08, aF = 0.95 * Math.PI;
+      for (let i = 0; i < 9; i++) {
+        const p = wallPoint(sF + i * 0.55, aF, 0.05);
+        frame(sF + i * 0.55);
+        const rib = new THREE.TorusGeometry(0.9 - Math.abs(i - 4) * 0.08, 0.06, 6, 14, Math.PI * 0.9);
+        rib.rotateY(Math.atan2(smp.t.x, smp.t.z));
+        rib.translate(p.x, p.y - 0.9, p.z);
+        parts.push(rib);
+        const vert = new THREE.SphereGeometry(0.13, 8, 6).scale(1, 0.8, 1.2).translate(p.x, p.y, p.z);
+        parts.push(vert);
+      }
+      // skull at the front of the spine
+      const sp = wallPoint(sF + 5.6, aF, 0.1);
+      parts.push(new THREE.SphereGeometry(0.45, 12, 8).scale(1.6, 0.7, 0.8).translate(sp.x, sp.y - 0.2, sp.z));
+      for (let k = 0; k < 7; k++) parts.push(new THREE.ConeGeometry(0.04, 0.18, 5).rotateX(Math.PI).translate(sp.x + (k - 3) * 0.12, sp.y - 0.55, sp.z));
+      this.scene.add(new THREE.Mesh(mergeGeos(parts), boneMat));
+    }
+    // ---- puddles on the floor ----
+    {
+      const pm = new THREE.MeshStandardMaterial({ color: 0x0c0d0e, roughness: 0.04, metalness: 0.4, envMapIntensity: 0.6 });
+      for (let i = 0; i < (hi ? 14 : 7); i++) {
+        const s = s0 + 5 + rnd() * (len - 10);
+        const side = rnd() < 0.5 ? -1 : 1;
+        frame(s);
+        const p = smp.p.clone().addScaledVector(smp.r, side * (1.2 + rnd() * 0.6)).addScaledVector(smp.u, -0.45);
+        const m = new THREE.Mesh(new THREE.CircleGeometry(0.4 + rnd() * 0.5, 16).rotateX(-Math.PI / 2), pm);
+        m.scale.set(1.4, 1, 0.8); m.position.copy(p); m.rotation.y = rnd() * 3;
+        this.scene.add(m);
+      }
+    }
+    // ---- portals: boulder arch and hanging vines ----
+    {
+      const rockMat = new THREE.MeshStandardMaterial({ map: tex.map, normalMap: tex.normal, roughness: 0.9, color: 0x9a948a });
+      const vineTex = TX.makeFrondTexture(17, [0.2, 0.36, 0.1]);
+      const vineMat = new THREE.MeshStandardMaterial({ map: vineTex, alphaTest: 0.45, side: THREE.DoubleSide, roughness: 0.9 });
+      for (const [sp, dirSign] of [[s0 + 1, 1], [s1 - 1, -1]]) {
+        for (let k = 0; k < 9; k++) {
+          const a = -0.15 * Math.PI + (1.3 * Math.PI) * k / 8;
+          const p = wallPoint(sp, a, -0.6);
+          const g = new THREE.IcosahedronGeometry(0.8 + rnd() * 0.9, 1);
+          const pp = g.attributes.position;
+          for (let i = 0; i < pp.count; i++) { const f = 1 + 0.25 * n(pp.getX(i) * 2 + k, pp.getY(i) * 2 + pp.getZ(i)); pp.setXYZ(i, pp.getX(i) * f, pp.getY(i) * f * 0.8, pp.getZ(i) * f); }
+          g.computeVertexNormals();
+          const m = new THREE.Mesh(g, rockMat);
+          m.position.copy(p); m.rotation.set(rnd() * 3, rnd() * 3, rnd() * 3);
+          m.castShadow = true; m.receiveShadow = true;
+          this.scene.add(m);
+        }
+        frame(sp);
+        for (let k = 0; k < (hi ? 14 : 8); k++) {
+          const a = Math.PI * (0.2 + 0.6 * rnd());
+          const p = wallPoint(sp + dirSign * 0.3, a, 0.1);
+          const L = 1 + rnd() * 1.6;
+          const v = new THREE.Mesh(new THREE.PlaneGeometry(0.35, L), vineMat);
+          v.position.copy(p).add(new THREE.Vector3(0, -L / 2, 0));
+          v.rotation.y = Math.atan2(smp.t.x, smp.t.z) + Math.PI / 2 + (rnd() - 0.5) * 0.6;
+          this.scene.add(v);
+          const ph = rnd() * 6;
+          this.animated.push(t => { v.rotation.z = Math.sin(t * 1.1 + ph) * 0.06; });
+        }
+      }
+    }
+    // ---- torches on brackets with real flickering light ----
     const flame = this.flameTex || (this.flameTex = TX.makeFlameTexture());
+    const woodMat = new THREE.MeshStandardMaterial({ color: 0x3a2614, roughness: 0.9 });
+    const ironMat = new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.5, metalness: 0.8 });
+    this.torchPts = [];
     this.tunnelEyes = [];
     const eyeMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(4, 2.6, 0.3) });
-    for (let s = s0 + 8; s < s1 - 6; s += 13) {
-      tr.sample(s, smp);
-      const sd = (Math.round(s / 13) % 2) ? 1 : -1;
+    for (let s = s0 + 7; s < s1 - 5; s += 11) {
+      const sd = (Math.round(s / 11) % 2) ? 1 : -1;
+      const a = sd > 0 ? 0.08 * Math.PI : 0.92 * Math.PI;
+      const wp = wallPoint(s, a, 0.05);
+      frame(s);
+      const toC = smp.p.clone().addScaledVector(smp.u, 1.4).sub(wp).normalize();
+      const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.05, 0.6, 6), woodMat);
+      stick.position.copy(wp).addScaledVector(toC, 0.25);
+      stick.lookAt(wp.clone().addScaledVector(toC, 1).add(new THREE.Vector3(0, 1.4, 0)));
+      stick.rotateX(Math.PI / 2);
+      const bracket = new THREE.Mesh(new THREE.TorusGeometry(0.07, 0.015, 5, 10), ironMat);
+      bracket.position.copy(wp).addScaledVector(toC, 0.18);
+      this.scene.add(stick, bracket);
+      const top = wp.clone().addScaledVector(toC, 0.38).add(new THREE.Vector3(0, 0.3, 0));
       const fl = new THREE.Sprite(new THREE.SpriteMaterial({ map: flame, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
-      fl.scale.set(0.5, 0.9, 1);
-      fl.position.copy(smp.p).addScaledVector(smp.r, sd * 2.4).addScaledVector(smp.u, 2.1);
-      this.scene.add(fl);
+      fl.scale.set(0.45, 0.85, 1);
+      fl.position.copy(top).add(new THREE.Vector3(0, 0.25, 0));
+      const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.glowTex || (this.glowTex = TX.makeSoftDot(64, 'rgba(255,150,60,1)', 'rgba(255,120,40,0)')), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.35 }));
+      glow.scale.set(2.6, 2.6, 1); glow.position.copy(fl.position);
+      this.scene.add(fl, glow);
+      this.torchPts.push(fl.position.clone());
       const ph = s;
-      this.animated.push(t => { fl.scale.y = 0.85 + Math.sin(t * 19 + ph) * 0.1; fl.material.opacity = 0.85 + Math.sin(t * 31 + ph) * 0.15; });
-      // eyes pair
+      this.animated.push(t => { const f = 0.85 + Math.sin(t * 19 + ph) * 0.1 + Math.sin(t * 7.3 + ph) * 0.05; fl.scale.y = f; fl.material.opacity = 0.85 + Math.sin(t * 31 + ph) * 0.15; glow.material.opacity = 0.28 + f * 0.1; });
+      // glowing eyes watching from crevices on the other side
       const eg = new THREE.Group();
-      for (const ex of [-0.13, 0.13]) {
-        const e = new THREE.Mesh(new THREE.SphereGeometry(0.045, 8, 6), eyeMat);
-        e.position.x = ex;
-        eg.add(e);
-      }
-      eg.position.copy(smp.p).addScaledVector(smp.r, -sd * 2.6).addScaledVector(smp.u, 0.9 + (s % 3) * 0.3).addScaledVector(smp.t, 4);
+      for (const ex of [-0.13, 0.13]) { const e = new THREE.Mesh(new THREE.SphereGeometry(0.045, 8, 6), eyeMat); e.position.x = ex; eg.add(e); }
+      eg.position.copy(wallPoint(s + 4, sd > 0 ? 1.05 * Math.PI : -0.05 * Math.PI, 0.25));
       eg.lookAt(smp.p.clone().addScaledVector(smp.u, 1.2));
       this.scene.add(eg);
       this.tunnelEyes.push(eg);
     }
     const blinkT = this.tunnelEyes.map((_, i) => i * 1.7);
-    this.animated.push(t => {
-      this.tunnelEyes.forEach((e, i) => { const b = (t + blinkT[i]) % 4; e.scale.y = b < 0.12 ? 0.1 : 1; });
+    this.animated.push(t => { this.tunnelEyes.forEach((e, i) => { const b = (t + blinkT[i]) % 4; e.scale.y = b < 0.12 ? 0.1 : 1; }); });
+    // pooled point lights that jump to the torches / crystals nearest the rider
+    this.caveLights = [];
+    for (let i = 0; i < (hi ? 3 : 2); i++) {
+      const L = new THREE.PointLight(0xff9a4a, 0, 14, 1.6);
+      this.scene.add(L);
+      this.caveLights.push(L);
+    }
+    // ---- water drips ----
+    this.drips = [];
+    const dripMat = new THREE.MeshBasicMaterial({ color: 0xbfd8e6, transparent: true, opacity: 0.7 });
+    for (let i = 0; i < (hi ? 30 : 14); i++) {
+      const s = s0 + 4 + rnd() * (len - 8);
+      const top = wallPoint(s, Math.PI * (0.3 + rnd() * 0.4), 0.3);
+      const m = new THREE.Mesh(new THREE.SphereGeometry(0.025, 5, 4).scale(1, 2.2, 1), dripMat);
+      m.position.copy(top);
+      this.scene.add(m);
+      frame(s);
+      this.drips.push({ m, top, floor: smp.p.y - 0.4, t: rnd() * 2 });
+    }
+    // ---- bats that burst out toward the cart ----
+    this.bats = [];
+    const batMat = new THREE.MeshStandardMaterial({ color: 0x4a3a30, emissive: 0x1a120c, roughness: 0.8, side: THREE.DoubleSide });
+    for (let i = 0; i < (hi ? 26 : 14); i++) {
+      const b = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.SphereGeometry(0.09, 6, 5).scale(1, 0.8, 1.5), batMat);
+      const wl = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.22).translate(-0.21, 0, 0), batMat);
+      const wr = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.22).translate(0.21, 0, 0), batMat);
+      wl.rotation.x = wr.rotation.x = -Math.PI / 2;
+      b.add(body, wl, wr);
+      b.visible = false;
+      this.scene.add(b);
+      this.bats.push({ g: b, wl, wr, off: new THREE.Vector3((rnd() - 0.5) * 3, (rnd() - 0.3) * 2, rnd() * 8), ph: rnd() * 6 });
+    }
+    this.batRun = { sStart: tr.sOf('tunnelIn') + 4, t: -1 };
+    this.caveRange = [s0, s1];
+  }
+
+  // no grass or ferns inside the cave
+  clearCave() {
+    if (!this.caveRange || !this.vegMeshes) return;
+    const smp = { p: new THREE.Vector3(), t: new THREE.Vector3(), r: new THREE.Vector3(), u: new THREE.Vector3() };
+    for (let s = this.caveRange[0] - 2; s < this.caveRange[1] + 2; s += 3) {
+      this.track.sample(s, smp);
+      this.clearAround(smp.p.x, smp.p.z, 9);
+    }
+  }
+
+  // per-frame cave effects; s = cart position, cam = rider position, fwd = track direction
+  updateCave(dt, s, cam, fwd, audio) {
+    if (!this.caveLights) return;
+    const tr = this.track;
+    const [s0, s1] = this.caveRange;
+    const inside = s > s0 - 15 && s < s1 + 10;
+    // nearest torches and crystal clusters get the pooled lights
+    const cands = this.torchPts.map(p => ({ p, c: 0xff9a4a, d: p.distanceToSquared(cam) }))
+      .concat(this.caveGlow.map(g => ({ p: g.p, c: g.c, d: g.p.distanceToSquared(cam) })))
+      .sort((a, b) => a.d - b.d);
+    this.caveLights.forEach((L, i) => {
+      const c = cands[i];
+      if (!inside || !c) { L.intensity = 0; return; }
+      L.position.copy(c.p);
+      L.color.setHex(c.c);
+      const torch = c.c === 0xff9a4a;
+      L.intensity = (torch ? 9 : 6) * (0.85 + Math.sin(this.time * (torch ? 17 : 2) + i * 3) * (torch ? 0.12 : 0.2));
     });
+    // dripping water
+    for (const d of this.drips) {
+      d.t += dt;
+      const fall = d.t - 1.2;
+      if (fall < 0) { d.m.position.copy(d.top); d.m.scale.setScalar(0.4 + d.t / 1.2 * 0.6); }
+      else {
+        d.m.position.set(d.top.x, d.top.y - 4.9 * fall * fall, d.top.z);
+        if (d.m.position.y < d.floor) { d.t = Math.random() * 0.8; if (inside && audio && d.top.distanceTo(cam) < 10) audio.click(0.12, 3200 + Math.random() * 1500); }
+      }
+    }
+    // bats swarm out of the dark toward the rider just after entering
+    const B = this.batRun;
+    const dsB = tr.wrap(s - B.sStart);
+    if (B.t < 0 && dsB > 0 && dsB < 3) { B.t = 0; if (audio) for (let k = 0; k < 4; k++) setTimeout(() => audio.click(0.25, 5500 + Math.random() * 2000), k * 90); }
+    if (B.t >= 0) {
+      B.t += dt;
+      const sm = { p: new THREE.Vector3(), t: new THREE.Vector3(), r: new THREE.Vector3(), u: new THREE.Vector3() };
+      for (const b of this.bats) {
+        // fly from deep inside the tunnel, past the rider's head and out behind
+        const along = 28 - B.t * 22 + b.off.z - 4;
+        tr.sample(s + along, sm);
+        b.g.position.copy(sm.p).addScaledVector(sm.u, 1.8 + b.off.y * 0.5 + Math.sin(B.t * 9 + b.ph) * 0.25).addScaledVector(sm.r, b.off.x * 0.6 + Math.sin(B.t * 7 + b.ph) * 0.3);
+        b.g.lookAt(b.g.position.clone().addScaledVector(sm.t, -1));
+        const flap = Math.sin(B.t * 40 + b.ph) * 0.9;
+        b.wl.rotation.y = flap; b.wr.rotation.y = -flap;
+        b.g.visible = along > -6;
+      }
+      if (B.t > 2.4) { B.t = -2; this.bats.forEach(b => { b.g.visible = false; }); }
+    } else if (B.t < -1 && dsB > 40) B.t = -1;
   }
 
   update(dt) {
@@ -690,6 +989,11 @@ export class World {
     this.skyUniforms.time.value = this.time;
     this.waterNormal.offset.set(this.time * 0.012, this.time * 0.006);
     this.hemi.intensity += (0.55 * this.hemiFactor - this.hemi.intensity) * Math.min(1, dt * 3);
+    if (this.scene.fog) {
+      if (!this.fogDay) this.fogDay = this.scene.fog.color.clone();
+      const cave = 1 - this.hemiFactor;
+      this.scene.fog.color.copy(this.fogDay).lerp(new THREE.Color(0.07, 0.06, 0.05), Math.min(1, cave * 1.15));
+    }
     this.updateVolcano(dt);
     for (const f of this.animated) f(this.time);
   }
