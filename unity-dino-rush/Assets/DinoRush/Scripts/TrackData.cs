@@ -126,7 +126,7 @@ namespace DinoRush
         void BuildZones()
         {
             SetRange("lift1", SOf("liftStart") + 6, SOf("liftTop") + 4);
-            SetRange("lift2", SOf("lift2Start"), SOf("lift2Top") + 2);
+            SetRange("lift2", SOf("surface") - 6, SOf("lift2Top") + 2); // the chain hauls the cart out of the lagoon
             SetRange("drive", SOf("helixOut") + 10, SOf("tunnelOut"));
             SetRange("launch", SOf("tunnelOut"), SOf("tunnelOut") + 50);
             SetRange("roll", SOf("tunnelOut") + 56, SOf("tunnelOut") + 100);

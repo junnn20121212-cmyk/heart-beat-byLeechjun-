@@ -44,14 +44,17 @@ add(null, [206, 17, 70]);
 add('hill', [200, 25, 96]);
 add(null, [182, 13, 118]);
 // river plunge: the track dives ~4 m under the surface through a glass tube
+// lagoon dive: the track plunges into a deep lagoon and snakes ~75 m along the bottom
 add(null, [163, 6, 134]);
-add('splash', [151, 1.2, 138.5]);
-add('dive', [137, -3.4, 140.5]);
-add(null, [125, -4.3, 139.5]);
-add(null, [114, -4.1, 147]);
-add('splash2', [112, -3.8, 159]);
-add(null, [106, 0.3, 168]);
-add(null, [95, 3.5, 172]);
+add('splash', [153, 1.6, 138]);
+add(null, [145, -0.9, 139]);
+add('dive', [136, -3.6, 138.5]);
+add(null, [125, -5.0, 135.5]);
+add('under1', [112, -5.8, 141]);
+add(null, [105, -5.8, 155]);
+add('under2', [112, -5.4, 169]);
+add('splash2', [101, -4.9, 179]);
+add('surface', [89, -0.5, 182]);
 add('lift2Start', [78, 7, 176]);
 add(null, [58, 19, 186]);
 add('brachio', [38, 31, 196]);
@@ -169,7 +172,7 @@ export class Track {
     };
     this.ranges = {
       lift1: [s('liftStart') + 6, s('liftTop') + 4],
-      lift2: [s('lift2Start'), s('lift2Top') + 2],
+      lift2: [s('surface') - 6, s('lift2Top') + 2], // the chain hauls the cart out of the lagoon
       drive: [s('helixOut') + 10, s('tunnelOut')],
       launch: [s('tunnelOut'), s('tunnelOut') + 50],
       roll: [s('tunnelOut') + 56, s('tunnelOut') + 100],

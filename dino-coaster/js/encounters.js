@@ -1,8 +1,9 @@
 // Scripted dinosaur encounters along the ride
 import * as THREE from 'three';
 import { Dino, Ptero } from './creatures.js';
+import { toTexture } from './textures.js';
 import { clamp, lerp, rng } from './noise.js';
-import { LINEUP } from './world.js';
+import { LINEUP, mergeGeos } from './world.js';
 import { makeSmokeTexture } from './textures.js';
 
 const smp = () => ({ p: new THREE.Vector3(), t: new THREE.Vector3(), r: new THREE.Vector3(), u: new THREE.Vector3() });
@@ -25,6 +26,8 @@ export class Director {
     this._v = new THREE.Vector3();
     this._h = new THREE.Vector3();
     this.messages = [];
+    this.updaters = [];
+    this.time = 0;
     // big dust plumes kicked up by running herds (visible from far away)
     this.plumes = [];
     const tex = makeSmokeTexture();
@@ -365,7 +368,7 @@ export class Director {
     // Mosasaurus: bursts out of the river the coaster skims and arcs right over the rider
     {
       const U = this.world.underRange;
-      if (U) this.actors.push(this.mosaDive(this.add('mosa', 1.5), U[0], U[1]));
+      if (U) { this.actors.push(this.mosaDive(this.add('mosa', 1.5), U[0], U[1])); this.buildLagoon(U[0], U[1]); }
       else { const [w0, w1] = this.waterSpan; this.actors.push(this.mosaLeap(this.add('mosa', 1.5), w0 + 2, Math.min(w1, w0 + 30))); }
     }
     // Dilophosaurus in the middle of the helix, spitting at the cart as it circles
@@ -426,6 +429,189 @@ export class Director {
     };
   }
 
+  // ---------- lagoon life along the underwater run ----------
+  buildLagoon(u0, u1) {
+    const T = this.track, L = u1 - u0, hi = this.q.high;
+    const at = f => u0 + L * f;
+    const sm = this._s;
+    // plesiosaurs: a pair glides alongside; one curls its neck to peer into the tube
+    [[0.5, 7, 1.0], [0.56, -8, 0.9]].forEach(([f, lat, sc], i) => {
+      const d = this.add('plesio', sc);
+      const sAt = at(f);
+      T.sample(sAt, sm); d.place(sm.p.x + sm.r.x * lat, sm.p.y + 1.2, sm.p.z + sm.r.z * lat, 0);
+      let said = false;
+      this.actors.push({ d, update: (dt, st) => {
+        const ds = this.dsTo(sAt, st.s);
+        const near = ds < 30 && ds > -25;
+        T.sample(near ? st.s + 2 + i * 3 : sAt, sm);
+        const peek = near && i === 0 ? clamp(1 - Math.abs(ds) / 18, 0, 1) : 0;
+        this._v.copy(sm.p).addScaledVector(sm.r, lat - Math.sign(lat) * peek * 1.5).addScaledVector(sm.u, 1.2 + Math.sin(this.time * 0.8 + i) * 0.5);
+        d.pos.lerp(this._v, Math.min(1, dt * 2));
+        d.heading = Math.atan2(sm.t.x, sm.t.z) - Math.sign(lat) * peek * 0.9;
+        d.speed = 3; d.look = st.cam; d.lookW = near ? 0.6 + peek * 0.4 : 0;
+        if (peek > 0.5 && !said) { said = true; this.say('플레시오사우루스가 유리 안을 들여다본다'); }
+        if (!near && Math.abs(ds) > 200) said = false;
+      } });
+    });
+    // Dunkleosteus: an armoured giant fish torpedoes underneath the tube
+    {
+      const d = this.add('dunkle', 1.2);
+      const sAt = at(0.66);
+      let state = 'wait', t = 0;
+      const A = new THREE.Vector3(), B = new THREE.Vector3();
+      this.actors.push({ d, update: (dt, st) => {
+        const ds = this.dsTo(sAt, st.s);
+        if (state === 'wait') {
+          d.pos.set(0, -60, 0);
+          if (ds > 0 && ds < 60 && this.eta(sAt, st.s) < 1.0) {
+            state = 'dash'; t = 0;
+            T.sample(sAt, sm);
+            A.copy(sm.p).addScaledVector(sm.r, -22).addScaledVector(sm.u, -2.5);
+            B.copy(sm.p).addScaledVector(sm.r, 22).addScaledVector(sm.u, -2.0);
+            this.say('둔클레오스테우스가 발밑으로!');
+          }
+        } else if (state === 'dash') {
+          t += dt;
+          const k = clamp(t / 1.6, 0, 1);
+          d.pos.lerpVectors(A, B, k);
+          d.pos.y += Math.sin(Math.PI * k) * 1.2;
+          d.heading = Math.atan2(B.x - A.x, B.z - A.z);
+          d.speed = 9; d.jawTarget = 0.5 + 0.5 * Math.sin(t * 9);
+          if (k > 0.45 && !d._hit) { d._hit = true; this.fx.shake = Math.max(this.fx.shake, 0.5); this.audio.thump(st.cam, 0.8); }
+          if (k >= 1) { state = 'done'; d.pos.y = -60; }
+        } else if (Math.abs(ds) > 250) { state = 'wait'; d._hit = false; }
+      } });
+    }
+    // Archelon: a giant sea turtle drifting over the top of the tube
+    {
+      const g = new THREE.Group();
+      const shellC = document.createElement('canvas'); shellC.width = shellC.height = 256;
+      const cx = shellC.getContext('2d');
+      cx.fillStyle = '#4b5638'; cx.fillRect(0, 0, 256, 256);
+      cx.strokeStyle = 'rgba(25,30,18,0.8)'; cx.lineWidth = 6;
+      for (let i = 0; i < 6; i++) { cx.beginPath(); cx.moveTo(128, 0); cx.lineTo(128 + (i - 2.5) * 40, 256); cx.stroke(); }
+      for (let j = 1; j < 5; j++) { cx.beginPath(); cx.moveTo(0, j * 52); cx.lineTo(256, j * 52); cx.stroke(); }
+      const shellMat = new THREE.MeshStandardMaterial({ map: toTexture(shellC), roughness: 0.6 });
+      const skinMat = new THREE.MeshStandardMaterial({ color: 0x6f7860, roughness: 0.7, side: THREE.DoubleSide });
+      const shell = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 12), shellMat); shell.scale.set(1.7, 0.45, 2.1); g.add(shell);
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.4, 12, 8), skinMat); head.scale.set(1, 0.8, 1.3); head.position.set(0, 0.05, 2.3); g.add(head);
+      const flips = [];
+      for (const [x, z, l] of [[1.5, 1.1, 2.2], [-1.5, 1.1, 2.2], [1.2, -1.4, 1.1], [-1.2, -1.4, 1.1]]) {
+        const piv = new THREE.Group(); piv.position.set(Math.sign(x) * 1.3, 0, z);
+        const f = new THREE.Mesh(new THREE.SphereGeometry(1, 10, 6), skinMat); f.scale.set(l / 2, 0.08, 0.45); f.position.x = Math.sign(x) * l / 2; f.rotation.y = -Math.sign(x) * 0.4;
+        piv.add(f); g.add(piv); flips.push({ piv, sd: Math.sign(x), front: z > 0 });
+      }
+      g.scale.setScalar(1.3);
+      g.visible = false;
+      this.scene.add(g);
+      const sAt = at(0.3);
+      let t = 0, said = false;
+      this.updaters.push((dt, st) => {
+        const ds = this.dsTo(sAt, st.s);
+        if (ds > 45 || ds < -35) { g.visible = false; said = ds > 45 ? false : said; return; }
+        g.visible = true; t += dt;
+        // crosses slowly over the tube from right to left
+        T.sample(sAt, sm);
+        const k = clamp((30 - ds) / 60, 0, 1);
+        g.position.copy(sm.p).addScaledVector(sm.r, lerp(14, -14, k)).addScaledVector(sm.u, 5.2);
+        g.lookAt(g.position.clone().addScaledVector(sm.r, -1));
+        g.rotation.z = Math.sin(t * 0.7) * 0.08;
+        for (const f of flips) f.piv.rotation.z = f.sd * Math.sin(t * 1.6 + (f.front ? 0 : 1.2)) * (f.front ? 0.6 : 0.3);
+        if (k > 0.4 && !said) { said = true; this.say('머리 위로 거대 바다거북이 지나간다'); }
+      });
+    }
+    // ammonites drifting and jetting around the middle of the run
+    {
+      const shellParts = [];
+      for (let i = 0; i < 26; i++) {
+        const a = i * 0.42, r = 0.05 + i * 0.012;
+        shellParts.push(new THREE.SphereGeometry(r * 1.4, 8, 6).translate(Math.cos(a) * r * 3.2, Math.sin(a) * r * 3.2, 0));
+      }
+      const shellGeo = mergeGeos(shellParts.filter((_, k) => k % 3));
+      const ribGeo = mergeGeos(shellParts.filter((_, k) => !(k % 3)).concat(Array.from({ length: 6 }, (_, k) => new THREE.ConeGeometry(0.03, 0.5, 4).rotateZ(Math.PI / 2).translate(-0.35, (k - 2.5) * 0.04, 0))));
+      const shellMat = new THREE.MeshStandardMaterial({ color: 0xc9a77a, roughness: 0.35, metalness: 0.1 });
+      const stripeMat = new THREE.MeshStandardMaterial({ color: 0x7a4f2c, roughness: 0.6 });
+      this.ammos = [];
+      for (let i = 0; i < (hi ? 9 : 5); i++) {
+        const grp = new THREE.Group();
+        grp.add(new THREE.Mesh(shellGeo, shellMat), new THREE.Mesh(ribGeo, stripeMat));
+        T.sample(at(0.4 + Math.random() * 0.25), sm);
+        const side = i % 2 ? 1 : -1;
+        const home = sm.p.clone().addScaledVector(sm.r, side * (6.5 + Math.random() * 4)).addScaledVector(sm.u, Math.random() * 4 - 0.5);
+        grp.position.copy(home); grp.scale.setScalar(1.3 + Math.random() * 0.6);
+        this.scene.add(grp);
+        this.ammos.push({ g: grp, home, ph: Math.random() * 6 });
+      }
+      this.updaters.push((dt, st) => {
+        for (const a of this.ammos) {
+          if (a.g.position.distanceTo(st.cam) > 80) continue;
+          a.ph += dt;
+          const jet = Math.max(0, Math.sin(a.ph * 1.4)) ** 6; // pulse of jet propulsion
+          a.g.position.set(a.home.x + Math.sin(a.ph * 0.4) * 1.2, a.home.y + Math.sin(a.ph * 0.6) * 0.6 + jet * 0.3, a.home.z + Math.cos(a.ph * 0.4) * 1.2);
+          a.g.rotation.y = a.ph * 0.4 + Math.PI / 2;
+          a.g.rotation.z = Math.sin(a.ph * 1.4) * 0.2;
+        }
+      });
+    }
+    // a bait ball of silver fish that splits around the tube
+    {
+      const N = hi ? 220 : 110;
+      const fg = new THREE.SphereGeometry(0.1, 6, 4).scale(0.45, 0.6, 1.6);
+      const im = new THREE.InstancedMesh(fg, new THREE.MeshStandardMaterial({ color: 0xbfd6e0, metalness: 0.8, roughness: 0.25 }), N);
+      im.frustumCulled = false;
+      this.scene.add(im);
+      T.sample(at(0.16), sm);
+      const C = sm.p.clone().addScaledVector(sm.u, 1.2);
+      const fish = [];
+      for (let i = 0; i < N; i++) fish.push({ r: 1.5 + Math.random() * 4.5, y: (Math.random() - 0.5) * 4, ph: Math.random() * 6.28, w: (0.6 + Math.random() * 0.6) * (Math.random() < 0.5 ? 1 : -1), p: new THREE.Vector3(), push: 0 });
+      const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), one = new THREE.Vector3(1, 1, 1), up = new THREE.Vector3(0, 1, 0);
+      let said = false;
+      this.updaters.push((dt, st) => {
+        const dc = C.distanceTo(st.cam);
+        if (dc > 90) { im.visible = false; return; }
+        im.visible = true;
+        if (dc < 10 && !said) { said = true; this.say('물고기 떼가 갈라진다!'); }
+        if (dc > 60) said = false;
+        fish.forEach((f, i) => {
+          f.ph += f.w * dt;
+          // scatter away from the rider when the cart passes through the ball
+          const away = clamp(1 - dc / 12, 0, 1);
+          f.push += ((away > 0 ? 1 : 0) * 3 - f.push) * Math.min(1, dt * 3);
+          const r = f.r + f.push * (1.5 + f.r * 0.4);
+          f.p.set(C.x + Math.cos(f.ph) * r, C.y + f.y + Math.sin(f.ph * 2) * 0.3, C.z + Math.sin(f.ph) * r);
+          const dir = new THREE.Vector3(-Math.sin(f.ph) * f.w, 0, Math.cos(f.ph) * f.w).normalize();
+          q.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir);
+          m4.compose(f.p, q, one);
+          im.setMatrixAt(i, m4);
+        });
+        im.instanceMatrix.needsUpdate = true;
+      });
+    }
+    // sun shafts piercing the water (only drawn while the rider is under water)
+    {
+      const c = document.createElement('canvas'); c.width = 64; c.height = 256;
+      const x = c.getContext('2d');
+      const gr = x.createLinearGradient(0, 0, 0, 256); gr.addColorStop(0, 'rgba(220,250,255,0.55)'); gr.addColorStop(1, 'rgba(220,250,255,0)');
+      x.fillStyle = gr; x.fillRect(0, 0, 64, 256);
+      const gh = x.createLinearGradient(0, 0, 64, 0); gh.addColorStop(0, 'rgba(0,0,0,1)'); gh.addColorStop(0.5, 'rgba(0,0,0,0)'); gh.addColorStop(1, 'rgba(0,0,0,1)');
+      x.globalCompositeOperation = 'destination-out'; x.fillStyle = gh; x.fillRect(0, 0, 64, 256);
+      const mat = new THREE.MeshBasicMaterial({ map: toTexture(c), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false });
+      this.rays = new THREE.Group();
+      for (let i = 0; i < (hi ? 26 : 14); i++) {
+        T.sample(at(Math.random()), sm);
+        const p = sm.p.clone().addScaledVector(sm.r, (Math.random() - 0.5) * 20);
+        const h = 7 + Math.random() * 4;
+        const m = new THREE.Mesh(new THREE.PlaneGeometry(1.2 + Math.random() * 1.6, h), mat);
+        m.position.set(p.x, -h / 2 + 0.1, p.z);
+        m.rotation.set(0.25, Math.random() * Math.PI, 0.15);
+        this.rays.add(m);
+      }
+      this.rays.visible = false;
+      this.scene.add(this.rays);
+      this.updaters.push((dt, st) => { this.rays.visible = st.cam.y < -0.05; this.rays.children.forEach((m, i) => { m.material.opacity = 0.7 + Math.sin(this.time * 0.8 + i) * 0.3; }); });
+    }
+  }
+
   // breaches ahead of the cart, then hunts it underwater beside the glass tube and rams it
   mosaDive(d, w0, w1) {
     let state = 'wait', t = 0, lunged = false;
@@ -462,8 +648,9 @@ export class Director {
           // glides alongside the tube, circles ahead, then lunges at the glass
           t += dt;
           const mid = ds0 < 0 && ds1 > 0;
-          const lungeK = lunged ? 0 : clamp((t - 1.2) / 0.6, 0, 1);
-          const lat = lerp(5.6, 3.0, lungeK * lungeK);
+          const lungeStart = w0 + (w1 - w0) * 0.74;
+          const lungeK = lunged ? 0 : clamp((st.s - lungeStart) / 6, 0, 1);
+          const lat = lerp(st.s < lungeStart - 25 ? 12 : 6, 3.0, lungeK * lungeK);
           T.sample(st.s + 6 - lungeK * 4, this._s);
           d.pos.copy(this._s.p).addScaledVector(this._s.r, lat).addScaledVector(this._s.u, 0.8 + Math.sin(t * 1.5) * 0.4);
           d.heading = Math.atan2(this._s.t.x, this._s.t.z) - lungeK * 1.2;
@@ -1110,7 +1297,7 @@ export class Director {
         if (state === 'hidden') {
           d.pos.y = yLow;
           d.root.visible = false;
-          if (ds < 95 && ds > 20) { state = 'rise'; t = 0; d.root.visible = true; }
+          if (ds < (this.world.underRange ? 30 : 95) && ds > (this.world.underRange ? 6 : 20)) { state = 'rise'; t = 0; d.root.visible = true; }
         } else if (state === 'rise') {
           t += dt;
           const k = clamp(t / 1.3, 0, 1);
@@ -1552,6 +1739,8 @@ export class Director {
         }
       } else if (ds0 > 50) K.said = false;
     }
+    this.time += dt;
+    for (const u of this.updaters) u(dt, st);
     if (this.spitBlobs) for (let i = this.spitBlobs.length - 1; i >= 0; i--) {
       const b = this.spitBlobs[i];
       b.t += dt / 0.55;

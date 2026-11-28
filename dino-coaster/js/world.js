@@ -9,7 +9,7 @@ const CELL = (HALF * 2) / RES;
 export const VOLCANO = { x: 470, z: -330 };
 const RIVER = [[760, 430], [520, 330], [330, 250], [230, 205], [165, 168], [128, 150], [92, 126], [62, 106]];
 const LAKE = { x: 45, z: 92, r: 34 };
-export const POOL = { x: 127, z: 152, r: 22 }; // deep river pool for the underwater section
+export const POOL = { x: 120, z: 157, r: 34 }; // deep river pool for the underwater section
 export const LINEUP = { x: -60, z: 105 };
 
 function distToPolyline(x, z, pts) {
@@ -65,7 +65,7 @@ export class World {
     const dr = distToPolyline(x, z, RIVER);
     if (dr < 40) h = lerp(-2.6, h, smoothstep(9, 30, dr));
     const dp = Math.hypot(x - POOL.x, z - POOL.z);
-    if (dp < POOL.r + 30) h = Math.min(h, lerp(-10, h, smoothstep(POOL.r - 4, POOL.r + 26, dp + 4 * this.n1(x * 0.06, z * 0.06))));
+    if (dp < POOL.r + 30) h = Math.min(h, lerp(-12, h, smoothstep(POOL.r - 6, POOL.r + 24, dp + 4 * this.n1(x * 0.06, z * 0.06))));
     const dl = Math.hypot(x - LAKE.x, z - LAKE.z);
     if (dl < 70) h = lerp(-4.5, h, smoothstep(LAKE.r - 4, LAKE.r + 26, dl + 6 * this.n2(x * 0.05, z * 0.05)));
     // station flat pad

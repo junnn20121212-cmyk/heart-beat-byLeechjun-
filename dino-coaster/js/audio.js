@@ -235,6 +235,19 @@ export class AudioEngine {
     o.start(t0); o.stop(t0 + 0.4);
   }
 
+  // two-tone emergency klaxon
+  alarm() {
+    if (!this.ctx) return;
+    const ctx = this.ctx, t0 = ctx.currentTime;
+    const o = ctx.createOscillator(); o.type = 'square';
+    for (let k = 0; k < 6; k++) o.frequency.setValueAtTime(k % 2 ? 620 : 860, t0 + k * 0.28);
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2200;
+    const g = ctx.createGain(); g.gain.value = 0;
+    g.gain.linearRampToValueAtTime(0.16, t0 + 0.03); g.gain.setValueAtTime(0.16, t0 + 1.6); g.gain.linearRampToValueAtTime(0, t0 + 1.75);
+    o.connect(lp); lp.connect(g); g.connect(this.master);
+    o.start(t0); o.stop(t0 + 1.8);
+  }
+
   setUnder(on) {
     if (!this.ctx || this._under === on) return;
     this._under = on;

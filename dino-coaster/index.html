@@ -69,12 +69,17 @@ details li{margin:3px 0}
 #fade{position:fixed;inset:0;pointer-events:none;background:#000;opacity:0}
 #toast{position:fixed;left:50%;bottom:calc(12% + env(safe-area-inset-bottom,0px));transform:translate(-50%,6px);background:rgba(0,0,0,.36);color:#f3ead2;font-weight:700;font-size:clamp(13px,1.9vw,16px);padding:5px 12px;border-radius:8px;opacity:0;transition:opacity .25s,transform .25s;pointer-events:none;white-space:nowrap;max-width:80vw;overflow:hidden;text-overflow:ellipsis;text-shadow:0 1px 2px rgba(0,0,0,.6)}
 #toast.show{opacity:1;transform:translate(-50%,0)}
+#alert{position:fixed;left:50%;top:max(16%,calc(env(safe-area-inset-top,0px) + 64px));transform:translate(-50%,-6px);display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 18px;border-radius:10px;background:rgba(120,10,6,.55);border:1px solid rgba(255,120,80,.7);color:#ffe2d0;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;text-align:center;max-width:88vw}
+#alert b{font-family:"Black Han Sans",sans-serif;font-weight:400;font-size:clamp(18px,3vw,26px);letter-spacing:.02em}
+#alert span{font-size:13px;opacity:.85}
+#alert.show{opacity:1;transform:translate(-50%,0);animation:alertblink .5s steps(2) 4}
+@keyframes alertblink{50%{background:rgba(190,20,10,.75)}}
 #end{align-items:center;justify-content:center;background:rgba(0,0,0,.45);padding:16px}
 #end .gate{text-align:left}
 #end h2{font-family:"Black Han Sans",sans-serif;font-weight:400;font-size:44px;margin:0 0 6px;color:var(--amber)}
 #vrExit{position:fixed;top:max(8px,env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);display:none;min-height:36px;padding:4px 14px;font-size:13px;opacity:.55;z-index:5}
 body.vr #vrExit{display:block}
-body.vr #hud,body.vr #fps,body.vr .progress,body.vr #toast,body.vr #flash,body.vr #gvig,body.vr #drops,body.vr #under{display:none}
+body.vr #hud,body.vr #fps,body.vr .progress,body.vr #toast,body.vr #alert,body.vr #flash,body.vr #gvig,body.vr #drops,body.vr #under{display:none}
 #vrDivider{position:fixed;left:50%;top:0;bottom:0;width:2px;margin-left:-1px;background:#000;display:none;pointer-events:none}
 body.vr #vrDivider{display:block}
 @media (min-width:900px) and (min-aspect-ratio:4/3){
@@ -155,6 +160,7 @@ body.vr #vrDivider{display:block}
 <div class="progress"><div id="prog"></div></div>
 <div id="fps"></div>
 <div id="toast"></div>
+<div id="alert"><b id="alertT"></b><span id="alertS"></span></div>
 <button class="ghost" id="vrExit">VR 종료</button>
 
 <div id="end" class="overlay" hidden>

@@ -382,7 +382,7 @@ async function startRide(mode) {
   gyro.recenter();
   app.yaw = 0; app.pitch = 0;
   app.dist = 0; app.s = lapS0; app.v = 0; app.rideT = 0;
-  app.holdPhase = null; app.launched = false; app.fovKick = 0;
+  app.holdPhase = null; app.launched = false; app.fovKick = 0; app.escape = false;
   app.cdTotal = app.countdown; app.barsDown = 0; app.beeped = false; app.wasRoll = false; app.excite = 0;
   setBars(1); inertia.reset();
   audio.announce('다이노 러시에 오신 것을 환영합니다. 안전바를 끝까지 내려 주세요. 공룡에게 손을 흔들지 마세요. 출발합니다!');
@@ -409,6 +409,13 @@ function exitToMenu() {
   onResize();
 }
 
+let alertT = 0;
+function alertBanner(title, sub) {
+  if (app.mode === 'normal') {
+    $('alertT').textContent = title; $('alertS').textContent = sub || '';
+    $('alert').classList.add('show'); alertT = 2.8;
+  } else { billboard.set(title, sub || ''); app.msgT = 2.6; }
+}
 let toastT = 0;
 function toast(t) {
   const el = $('toast');
@@ -530,8 +537,16 @@ function loop(now) {
     }
     // impact jolt: the hit knocks speed off for a moment
     if (app.fx.slow > 0) { app.fx.slow -= dt; v *= 0.72 + 0.28 * (1 - Math.max(0, app.fx.slow) / 0.55); }
+    // emergency escape mode: armed inside the cave, fires the booster at the exit
+    if (!app.escape && track.inRange(app.s, 'tunnel') && app.s > track.sOf('tunnelOut') - 26) {
+      app.escape = true;
+      alertBanner('⚠ 긴급 탈출 모드 가동', '랩터를 따돌린다 · 부스터 충전 중');
+      audio.alarm && audio.alarm();
+      audio.announce('긴급 탈출 모드 가동. 부스터를 점화합니다.');
+      buzz([80, 80, 80, 80, 80], true);
+    }
     // launch kick
-    if (smp.zone === 4 && !app.launched) { app.launched = true; audio.launch(); app.fx.shake = Math.max(app.fx.shake, 0.5); app.fovKick = 10; buzz([300, 60, 500], true); screamT = 0; screams(3, { rise: 1.5 }); }
+    if (smp.zone === 4 && !app.launched) { app.launched = true; alertBanner('부스터 점화!', '시속 119km');  audio.launch(); app.fx.shake = Math.max(app.fx.shake, 0.5); app.fovKick = 10; buzz([300, 60, 500], true); screamT = 0; screams(3, { rise: 1.5 }); }
     const remain = track.length - app.dist;
     if (remain < 6) v = Math.max(0.25, Math.min(v, remain * 0.6));
     app.v = v;
@@ -709,6 +724,7 @@ function loop(now) {
     $('gf').textContent = gv.toFixed(1);
     $('prog').style.width = (app.dist / track.length * 100).toFixed(1) + '%';
   }
+  if (alertT > 0) { alertT -= dt; if (alertT <= 0) $('alert').classList.remove('show'); }
   if (toastT > 0) { toastT -= dt; if (toastT <= 0) $('toast').classList.remove('show'); }
 
   // ---- render ----
