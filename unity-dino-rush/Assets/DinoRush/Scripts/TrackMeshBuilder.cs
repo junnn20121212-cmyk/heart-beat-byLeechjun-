@@ -132,6 +132,8 @@ namespace DinoRush
             {
                 if (tr.InRange(s, "tunnel")) continue;
                 if (s > roll.x - 4 && s < roll.y + 4) continue;
+                var roll2 = tr.ranges["roll2"];
+                if (s > roll2.x - 4 && s < roll2.y + 4) continue;
                 if (tr.InRange(s, "station") && s < tr.SOf("liftStart")) continue;
                 if (s > tr.SOf("brake2") + 25) continue;
                 var sm = tr.Sample(s);

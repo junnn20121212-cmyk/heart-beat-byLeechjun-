@@ -130,6 +130,7 @@ namespace DinoRush
             SetRange("drive", SOf("helixOut") + 10, SOf("tunnelOut"));
             SetRange("launch", SOf("tunnelOut"), SOf("tunnelOut") + 50);
             SetRange("roll", SOf("tunnelOut") + 56, SOf("tunnelOut") + 100);
+            SetRange("roll2", SOf("raptor1") + 4, SOf("raptor1") + 36);
             SetRange("trim", SOf("trim") - 22, SOf("trim") - 6);
             SetRange("brake", SOf("brake"), length);
             SetRange("station", 0, SOf("liftStart") + 6);
@@ -168,8 +169,8 @@ namespace DinoRush
                     {
                         case Zone.Station: nv = 2.6f; break;
                         case Zone.Lift: nv = Mathf.Max(5.2f, Mathf.Sqrt(Mathf.Max(v2 - 2 * 2.4f * ds, 0))); break;
-                        case Zone.Drive: nv = 12.5f; break;
-                        case Zone.Launch: nv = Mathf.Min(30f, Mathf.Sqrt(v * v + 2 * 14f * ds)); break;
+                        case Zone.Drive: nv = 16f; break;
+                        case Zone.Launch: nv = Mathf.Min(33f, Mathf.Sqrt(v * v + 2 * 15f * ds)); break;
                         case Zone.Trim: nv = Mathf.Max(14f, Mathf.Min(nv, Mathf.Sqrt(Mathf.Max(v * v - 2 * 6f * ds, 0)))); break;
                         case Zone.Brake:
                             float target = j * ds > brake2 ? 3.2f : 7.5f;
@@ -217,13 +218,16 @@ namespace DinoRush
                 }
                 var tmp = src; src = dst; dst = tmp;
             }
-            var roll = ranges["roll"];
-            for (int i = 0; i < n; i++)
+            foreach (var key in new[] { "roll", "roll2" })
             {
-                float sp = i * ds;
-                if (sp < roll.x || sp > roll.y) continue;
-                float t = (sp - roll.x) / (roll.y - roll.x);
-                src[i] += Mathf.PI * 2 * (t * t * (3 - 2 * t));
+                var roll = ranges[key];
+                for (int i = 0; i < n; i++)
+                {
+                    float sp = i * ds;
+                    if (sp < roll.x || sp > roll.y) continue;
+                    float t = (sp - roll.x) / (roll.y - roll.x);
+                    src[i] += Mathf.PI * 2 * (t * t * (3 - 2 * t));
+                }
             }
             bank = src;
             for (int i = 0; i < n; i++)

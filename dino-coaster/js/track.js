@@ -75,10 +75,15 @@ add('helixIn', [-100, 13, 205]);
   const hp = helixPoints();
   hp.forEach((p, i) => add(i === 0 ? 'helix0' : i === hp.length - 1 ? 'helixOut' : null, p));
 }
-add('raptor0', [-175, 6, 155]);
-add(null, [-180, 5, 122]);
-add('raptor1', [-174, 5, 88]);
-add(null, [-166, 5, 52]);
+// raptor run: tyre-driven forest dash with airtime hops, an S-weave and a barrel roll
+add('raptor0', [-172, 6, 158]);
+add('hop1', [-182, 11, 141]);
+add('raptorBoard', [-179, 4, 125]);
+add('hop2', [-168, 12, 109]);
+add('raptor1', [-174, 4, 93]);
+add('hop3', [-185, 7, 77]);
+add(null, [-180, 4, 61]);
+add(null, [-168, 5, 44]);
 add('tunnelIn', [-162, 5, 20]);
 add(null, [-158, 5, -10]);
 add('tunnelOut', [-150, 5, -40]);
@@ -91,7 +96,7 @@ add('trim', [-46, 12, -105]);
 add(null, [-26, 4, -98]);
 add('finalRex', [-6, 2.5, -94]);
 add(null, [16, 6, -90]);
-add(null, [44, 9, -82]);
+add('hop4', [44, 15, -82]);
 add(null, [72, 9, -64]);
 add(null, [82, 8, -38]);
 add('brake', [64, 7, -16]);
@@ -163,6 +168,7 @@ export class Track {
       drive: [s('helixOut') + 10, s('tunnelOut')],
       launch: [s('tunnelOut'), s('tunnelOut') + 50],
       roll: [s('tunnelOut') + 56, s('tunnelOut') + 100],
+      roll2: [s('raptor1') + 4, s('raptor1') + 36],
       trim: [s('trim') - 22, s('trim') - 6],
       brake: [s('brake'), this.length],
       station: [0, s('liftStart') + 6],
@@ -196,8 +202,8 @@ export class Track {
           // fins (about 0.25 g) until it slows to chain speed, so there is no sudden stop
           nv = Math.max(5.2, Math.sqrt(Math.max(v2 - 2 * 2.4 * ds, 0)));
         }
-        else if (z === 3) nv = 12.5;
-        else if (z === 4) nv = Math.min(30, Math.sqrt(v * v + 2 * 14 * ds));
+        else if (z === 3) nv = 16;
+        else if (z === 4) nv = Math.min(33, Math.sqrt(v * v + 2 * 15 * ds));
         else if (z === 6) nv = Math.max(14, Math.min(nv, Math.sqrt(Math.max(v * v - 2 * 6 * ds, 0))));
         else if (z === 5) {
           const target = j * ds > brake2 ? 3.2 : 7.5;
@@ -251,12 +257,14 @@ export class Track {
     }
     // zero-g heartline roll: one full barrel roll on top of the banking
     {
-      const [r0, r1] = this.ranges.roll;
+      for (const key of ['roll', 'roll2']) {
+      const [r0, r1] = this.ranges[key];
       for (let i = 0; i < n; i++) {
         const sp = i * ds;
         if (sp < r0 || sp > r1) continue;
         const t = (sp - r0) / (r1 - r0);
         src[i] += Math.PI * 2 * (t * t * (3 - 2 * t));
+      }
       }
     }
     this.bank = src;
@@ -463,6 +471,7 @@ export function buildTrackMeshes(track, world, q) {
   for (let s = 0; s < L; s += supStep) {
     if (track.inRange(s, 'tunnel')) continue;
     if (s > track.ranges.roll[0] - 4 && s < track.ranges.roll[1] + 4) continue;
+    if (s > track.ranges.roll2[0] - 4 && s < track.ranges.roll2[1] + 4) continue;
     if (track.inRange(s, 'station') && s < track.sOf('liftStart')) continue;
     if (s > track.sOf('brake2') + 25) continue; // station approach on ground
     track.sample(s, smp);

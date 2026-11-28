@@ -162,15 +162,16 @@ export class Director {
 
     // 7) RAPTOR pack through the forest
     {
-      const sStart = s('raptor0') - 10, sEnd = s('tunnelIn') - 8;
-      const cfg = [[-5, 4.6, 'raptor'], [3, -4.8, 'raptor2'], [-11, -6.0, 'raptor'], [-2, 6.2, 'raptor2']];
-      const pack = cfg.slice(0, q.high ? 4 : 3).map(([off, lat, k], i) => {
-        const d = this.add(k, 1.0);
-        return this.chaser(d, sStart, sEnd, off, lat, i);
-      });
-      pack.forEach(a => this.actors.push(a));
-      const lp = this.add('raptor', 1.05);
-      this.actors.push(this.leaper(lp, s('raptor1') + 10));
+      const sStart = s('raptor0') - 8, sEnd = s('tunnelIn') - 3;
+      // build-up: unseen calls circling in the forest while you corkscrew down the helix
+      this.stalk = { s0: s('helix0') + 50, s1: s('raptor0') - 6, next: 0, said: false };
+      // the pack runs right beside the cart and takes turns lunging in
+      const cfg = [[-3, 3.4, 'raptor'], [2, -3.6, 'raptor2'], [-8, -4.6, 'raptor'], [0, 4.4, 'raptor2'], [-13, 3.0, 'raptor']];
+      cfg.slice(0, q.high ? 5 : 3).forEach(([off, lat, k], i) => this.actors.push(this.chaser(this.add(k, 1.0), sStart, sEnd, off, lat, i)));
+      // one leaps onto the front of the cart; the airtime hill throws it off
+      this.actors.push(this.boarder(this.add('raptor', 1.0), s('raptorBoard') - 12, s('hop2')));
+      // one jumps straight over your head after the barrel roll
+      this.actors.push(this.leaper(this.add('raptor2', 1.05), s('raptor1') + 44));
     }
 
     // 8) CARNOTAURUS at the tunnel exit (launch!)
@@ -759,7 +760,7 @@ export class Director {
     const hide = new THREE.Vector3();
     this.trackPoint(sStart + 6, lat * 3.2, hide);
     d.place(hide.x, hide.y, hide.z, 0);
-    let state = 'hide', t = 0, screechT = 1 + i * 0.7;
+    let state = 'hide', t = 0, screechT = 1 + i * 0.7, lungeT = 1.2 + i * 0.9, lunge = 0;
     const target = new THREE.Vector3();
     const wob = Math.random() * 6;
     return {
@@ -773,11 +774,23 @@ export class Director {
           if (ds0 < 4 + i * 2 && ds0 > -40) { state = 'run'; t = 0; }
         } else if (state === 'run') {
           t += dt;
-          const sT = st.s + off + Math.sin(t * 0.8 + wob) * 2.5;
-          this.trackPoint(sT, lat + Math.sin(t * 1.3 + wob) * 0.8, target);
-          this.moveToward(d, target, 19, dt, 5, 16);
+          // take turns lunging in at the rider: close the gap, jaws wide, snap
+          lungeT -= dt;
+          if (lungeT < 0 && lunge <= 0) {
+            lunge = 0.5; lungeT = 2.2 + Math.random() * 2.5 + i * 0.3;
+            this.audio.screech(d.headWorld(this._h), { pitch: 0.9 + Math.random() * 0.4, gain: 1 });
+            this.fx.shake = Math.max(this.fx.shake, 0.35);
+            this.fx.kick = (this.fx.kick || 0) - Math.sign(lat) * 0.35; // flinch away
+            try { if (navigator.vibrate) navigator.vibrate(60); } catch (e) { /* ignore */ }
+          }
+          const lk = lunge > 0 ? Math.sin(Math.PI * (1 - lunge / 0.5)) : 0;
+          lunge -= dt;
+          const sT = st.s + off + Math.sin(t * 0.8 + wob) * 2 + lk * (2 - off * 0.3);
+          this.trackPoint(sT, (lat + Math.sin(t * 1.3 + wob) * 0.6) * (1 - 0.45 * lk), target);
+          this.moveToward(d, target, 23, dt, 6, 22);
           d.look = st.cam; d.lookW = 1;
-          d.jawTarget = Math.max(0, Math.sin(t * 3 + wob)) * 0.8;
+          d.jawTarget = lk > 0.1 ? 1 : Math.max(0, Math.sin(t * 3 + wob)) * 0.8;
+          d.headDip = -0.15 * lk;
           this.focus = d.pos;
           this.tension = 1;
           screechT -= dt;
@@ -786,8 +799,20 @@ export class Director {
             d.jawTarget = 1;
             this.audio.screech(d.headWorld(this._h), { pitch: 0.85 + Math.random() * 0.4 });
           }
-          if (i === 0 && t < 0.1) this.say('랩터 무리가 쫓아온다!');
-          if (dsE < 0) { state = 'stop'; t = 0; }
+          if (i === 0 && t < 0.1) this.say('랩터 무리다!! 사방에서 달려든다!');
+          if (dsE < 0) { state = i === 0 ? 'tail' : 'stop'; t = 0; if (i === 0) this.say('한 마리가 터널까지 쫓아온다!'); }
+        } else if (state === 'tail') {
+          // chases right behind the cart along the rails, into the dark tunnel
+          t += dt;
+          this.track.sample(st.s - 5.5 - Math.max(0, t - 2.5) * 6, this._s);
+          d.pos.copy(this._s.p).addScaledVector(this._s.u, 0.2);
+          d.heading = Math.atan2(this._s.t.x, this._s.t.z);
+          d.speed = st.v * 1.05;
+          d.look = st.cam; d.lookW = 1;
+          d.jawTarget = Math.max(0, Math.sin(t * 6)) ;
+          screechT -= dt;
+          if (screechT < 0) { screechT = 1.2 + Math.random(); this.audio.screech(d.headWorld(this._h), { pitch: 1, gain: 1 }); }
+          if (this.track.inRange(st.s, 'launch') || t > 7) { state = 'stop'; t = 0; }
         } else if (state === 'stop') {
           t += dt;
           d.speed = Math.max(0, d.speed - dt * 12);
@@ -801,50 +826,133 @@ export class Director {
     };
   }
 
+  // leaps from the bushes onto the cart's nose, snaps at the rider, is flung off on the airtime hill
+  boarder(d, sJump, sOff) {
+    const home = new THREE.Vector3();
+    this.trackPoint(sJump + 6, 10, home);
+    d.place(home.x, home.y, home.z, 0);
+    let state = 'wait', t = 0, snapT = 0, side = 1;
+    const from = new THREE.Vector3(), nose = new THREE.Vector3(), vel = new THREE.Vector3();
+    const noseOf = (stS) => {
+      this.track.sample(stS, this._s);
+      return nose.copy(this._s.p).addScaledVector(this._s.t, 2.3).addScaledVector(this._s.u, 0.95);
+    };
+    return {
+      d,
+      update: (dt, st) => {
+        const ds = this.dsTo(sJump, st.s);
+        if (state === 'wait') {
+          d.speed = 0; d.look = st.cam; d.lookW = ds < 40 && ds > -5 ? 1 : 0;
+          if (ds < 9 && ds > -2) { state = 'leap'; t = 0; from.copy(d.pos); this.audio.screech(d.headWorld(this._h), { pitch: 1.15, gain: 1 }); }
+        } else if (state === 'leap') {
+          t += dt;
+          const k = clamp(t / 0.65, 0, 1);
+          noseOf(st.s);
+          d.pos.lerpVectors(from, nose, k * k * (3 - 2 * k));
+          d.pos.y += Math.sin(Math.PI * k) * 3;
+          d.heading = Math.atan2(-this._s.t.x, -this._s.t.z);
+          d.speed = 3; d.jawTarget = 1; d.look = st.cam; d.lookW = 1;
+          this.focus = d.pos;
+          if (k >= 1) {
+            state = 'ride'; t = 0;
+            this.fx.shake = Math.max(this.fx.shake, 1.0); this.fx.wobble = 0.7;
+            this.fx.kick = (this.fx.kick || 0) + 0.8;
+            this.audio.thump(st.cam, 1.2); this.audio.clunk();
+            try { if (navigator.vibrate) navigator.vibrate([200, 50, 120]); } catch (e) { /* ignore */ }
+            this.say('랩터가 열차에 올라탔다!!');
+          }
+        } else if (state === 'ride') {
+          // clinging to the nose, face to face with the rider
+          t += dt; snapT -= dt;
+          noseOf(st.s);
+          d.pos.copy(nose);
+          d.heading = Math.atan2(-this._s.t.x, -this._s.t.z) + Math.sin(t * 5) * 0.15;
+          d.speed = 2.5;
+          d.look = st.cam; d.lookW = 1;
+          d.bodyPitch = 0.25 + Math.sin(t * 9) * 0.05;
+          if (snapT < 0) {
+            snapT = 0.55 + Math.random() * 0.35;
+            d.jawTarget = 1; d.headDip = 0.35;
+            this.fx.shake = Math.max(this.fx.shake, 0.45);
+            this.fx.flash = Math.max(this.fx.flash, 0.25);
+            if (Math.random() < 0.6) this.audio.screech(d.headWorld(this._h), { pitch: 1 + Math.random() * 0.3, gain: 1 });
+            try { if (navigator.vibrate) navigator.vibrate(70); } catch (e) { /* ignore */ }
+          } else { d.jawTarget = 0.35; d.headDip *= 0.85; }
+          this.focus = d.pos; this.tension = 1;
+          if (st.s > sOff - 4 || t > 4.5) {
+            // the airtime hill flings it off
+            state = 'thrown'; t = 0;
+            side = Math.random() < 0.5 ? -1 : 1;
+            vel.copy(this._s.t).multiplyScalar(st.v * 0.45).addScaledVector(this._s.r, side * 7).add(new THREE.Vector3(0, 6, 0));
+            d.headDip = 0; d.bodyPitch = 0;
+            this.fx.shake = Math.max(this.fx.shake, 0.8);
+            this.fx.kick = (this.fx.kick || 0) - side * 0.9;
+            this.audio.screech(d.headWorld(this._h), { pitch: 1.4, gain: 1 });
+            this.say('날려버렸다!!');
+          }
+        } else if (state === 'thrown') {
+          t += dt;
+          vel.y -= 9.81 * dt;
+          d.pos.addScaledVector(vel, dt);
+          d.root.rotation.x += dt * 6 * side; d.root.rotation.z += dt * 9;
+          d.speed = 6; d.jawTarget = 1;
+          const g = this.ground(d.pos.x, d.pos.z);
+          if (d.pos.y < g && vel.y < 0) {
+            d.pos.y = g; state = 'down'; t = 0;
+            d.root.rotation.x = 0; d.root.rotation.z = Math.PI / 2;
+            this.particles.burst(d.pos.clone().add(new THREE.Vector3(0, 0.3, 0)), 40, 'dust', 3);
+          }
+        } else if (state === 'down') {
+          d.speed = 0; d.root.rotation.z = Math.PI / 2;
+          if (Math.abs(ds) > 300) { d.root.rotation.set(0, 0, 0); d.place(home.x, home.y, home.z, 0); state = 'wait'; }
+        }
+      },
+    };
+  }
+
+  // charges down the track at the cart and leaps right over the rider's head
   leaper(d, sAt) {
     const start = new THREE.Vector3();
-    this.trackPoint(sAt + 14, 9, start);
+    this.trackPoint(sAt + 16, 0, start);
     d.place(start.x, start.y, start.z, 0);
     let state = 'wait', t = 0;
-    const a = new THREE.Vector3(), b = new THREE.Vector3();
     return {
       d,
       update: (dt, st) => {
         const ds = this.dsTo(sAt, st.s);
         if (state === 'wait') {
-          d.look = st.cam; d.lookW = 1;
-          if (ds < 16 && ds > 0) {
-            state = 'jump'; t = 0;
-            this.audio.screech(d.headWorld(this._h), { pitch: 1.2, gain: 1 });
-          }
+          this.track.sample(sAt + 16, this._s);
+          d.heading = Math.atan2(-this._s.t.x, -this._s.t.z);
+          d.speed = 0; d.look = st.cam; d.lookW = ds < 60 ? 1 : 0;
+          if (ds < 60 && ds > 30 && !d._warned) { d._warned = true; this.say('앞에 랩터가 서 있다!!'); this.audio.screech(d.headWorld(this._h), { pitch: 0.9, gain: 1 }); }
+          if (ds < 13 && ds > -2) { state = 'jump'; t = 0; }
         } else if (state === 'jump') {
+          // runs at the cart, launches and sails over the rider's head (cart-relative arc)
           t += dt;
-          const k = clamp(t / 1.0, 0, 1);
-          const sJ = sAt + 5;
-          this.trackPoint(sJ, 7.5, a);
-          this.trackPoint(sJ, -7.5, b);
-          d.pos.lerpVectors(a, b, k);
-          const gy = lerp(a.y, b.y, k);
-          this.track.sample(sJ, this._s);
-          const peak = Math.max(this._s.p.y + 1.6, gy) + 1.2;
-          d.pos.y = lerp(gy, peak, Math.sin(Math.PI * k)) - (1 - Math.sin(Math.PI * k)) * 0;
-          d.heading = Math.atan2(b.x - a.x, b.z - a.z);
-          d.speed = 3; // legs tucked-ish
-          d.jawTarget = 1;
-          d.look = st.cam; d.lookW = 1;
+          const k = clamp(t / 0.85, 0, 1);
+          const rel = lerp(9, -9, k);
+          this.track.sample(st.s + rel, this._s);
+          d.pos.copy(this._s.p).addScaledVector(this._s.u, 0.6 + Math.sin(Math.PI * k) * 2.6).addScaledVector(this._s.r, 0.4);
+          d.heading = Math.atan2(-this._s.t.x, -this._s.t.z);
+          d.speed = 4; d.jawTarget = 1; d.look = st.cam; d.lookW = 1;
           this.focus = d.pos;
-          if (k > 0.45 && k < 0.5) this.fx.shake = Math.max(this.fx.shake, 0.4);
-          if (k >= 1) { state = 'land'; t = 0; this.particles.burst(d.pos.clone().add(new THREE.Vector3(0, 0.3, 0)), 50, 'dust', 3); }
+          if (k > 0.42 && !d._passed) {
+            d._passed = true;
+            this.fx.shake = Math.max(this.fx.shake, 0.9); this.fx.flash = Math.max(this.fx.flash, 0.4);
+            this.audio.screech(st.cam, { pitch: 1.3, gain: 1.1 }); this.audio.thump(st.cam, 0.8);
+            try { if (navigator.vibrate) navigator.vibrate([90, 40, 90]); } catch (e) { /* ignore */ }
+            this.say('머리 위로 뛰어넘었다!!');
+          }
+          if (k >= 1) { state = 'land'; t = 0; d.pos.y = this.ground(d.pos.x, d.pos.z); this.particles.burst(d.pos.clone().add(new THREE.Vector3(0, 0.3, 0)), 50, 'dust', 3); }
         } else if (state === 'land') {
           t += dt;
-          const target = this._v;
-          this.trackPoint(st.s - 4, -6, target);
-          this.moveToward(d, target, 14, dt, 4, 12);
+          this.trackPoint(st.s - 6, -4, this._v);
+          this.moveToward(d, this._v, 20, dt, 4, 14);
           d.look = st.cam; d.lookW = 1;
           if (t > 4) state = 'idle';
         } else if (state === 'idle') {
           d.speed = Math.max(0, d.speed - dt * 10);
-          if (Math.abs(ds) > 260) { d.place(start.x, start.y, start.z, 0); state = 'wait'; }
+          if (Math.abs(ds) > 260) { d._warned = d._passed = false; d.place(start.x, start.y, start.z, 0); state = 'wait'; }
         }
       },
     };
@@ -896,6 +1004,20 @@ export class Director {
       F.p.root.position.set(x, y, z);
       F.p.root.rotation.set(cyc > 8 && cyc < 10 ? 0.5 : cyc > 10 && cyc < 12 ? -0.4 : 0, Math.atan2(dx, dz), -0.3);
       F.p.update(dt, cyc > 9 && cyc < 11 ? 0.2 : 0.8);
+    }
+    if (this.stalk) {
+      const K = this.stalk;
+      const ds0 = this.dsTo(K.s0, st.s), ds1 = this.dsTo(K.s1, st.s);
+      if (ds0 < 0 && ds1 > 0) {
+        this.tension = Math.max(this.tension, 0.7);
+        K.next -= dt;
+        if (!K.said) { K.said = true; this.say('…숲속에서 뭔가 우리를 따라온다'); }
+        if (K.next < 0) {
+          K.next = 0.9 + Math.random() * 1.6;
+          const a = Math.random() * Math.PI * 2, r = 20 + Math.random() * 25;
+          this.audio.screech(new THREE.Vector3(st.cam.x + Math.cos(a) * r, st.cam.y - 4, st.cam.z + Math.sin(a) * r), { pitch: 0.75 + Math.random() * 0.4, gain: 0.55 });
+        }
+      } else if (ds0 > 50) K.said = false;
     }
     for (const P of this.plumes) {
       if (P.life <= 0) continue;
