@@ -85,6 +85,10 @@
 
 ## 공룡 모델 넣기 (무료)
 
+> **쉬운 방법:** FBX를 Assets에 넣고 메뉴 **DinoRush → 3. 공룡 모델 연결** 을 누르세요.
+> 모델을 칸에 끌어다 놓고, 공룡 종류를 고른 다음 **연결하기** 를 누르면
+> 리그, 애니메이터, 텍스처, 프리팹, 공룡 칸 연결까지 자동으로 해줘요. (아래 2~5번을 대신 해줌)
+
 1. **무료 모델 찾기**
    - **Unity Asset Store** (Window → Package Manager → My Assets, 또는 assetstore.unity.com): "dinosaur" 검색 후 가격 필터를 **Free**로
    - **Sketchfab** (sketchfab.com): "dinosaur animated" 검색, **Downloadable** 체크, 라이선스가 **CC BY** 인지 확인, **FBX** 형식으로 받기
