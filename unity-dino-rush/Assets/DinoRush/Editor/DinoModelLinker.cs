@@ -76,6 +76,7 @@ namespace DinoRush.EditorTools
             clipNames.Clear(); clipRoles.Clear();
             if (!model) return;
             lastPath = AssetDatabase.GetAssetPath(model);
+            if (IsGltf(lastPath)) EnsureGltfMecanim(lastPath);
             foreach (var c in LoadClips(lastPath)) { clipNames.Add(c.name); clipRoles.Add(Guess(c.name)); }
             // nothing recognised: the first clip becomes the walk cycle
             if (clipRoles.Count > 0 && !clipRoles.Any(r => r == Role.걷기 || r == Role.달리기 || r == Role.서있기))
@@ -84,6 +85,30 @@ namespace DinoRush.EditorTools
                 if (i < 0) i = 0;
                 clipRoles[i] = Role.걷기;
             }
+        }
+
+        static bool IsGltf(string path)
+        {
+            string e = Path.GetExtension(path).ToLowerInvariant();
+            return e == ".glb" || e == ".gltf";
+        }
+
+        // glTFast imports animations as Legacy by default; Animator needs "Mecanim".
+        static void EnsureGltfMecanim(string path)
+        {
+            var imp = AssetImporter.GetAtPath(path);
+            if (!imp || imp is ModelImporter) return;
+            var so = new SerializedObject(imp);
+            var it = so.GetIterator();
+            bool changed = false;
+            while (it.Next(true))
+            {
+                if (it.propertyType != SerializedPropertyType.Enum) continue;
+                if (!it.name.ToLowerInvariant().Contains("animationmethod")) continue;
+                int mec = System.Array.FindIndex(it.enumNames, n => n.ToLowerInvariant().Contains("mecanim"));
+                if (mec >= 0 && it.enumValueIndex != mec) { it.enumValueIndex = mec; changed = true; }
+            }
+            if (changed) { so.ApplyModifiedPropertiesWithoutUndo(); imp.SaveAndReimport(); }
         }
 
         static Role Guess(string name)
@@ -163,12 +188,48 @@ namespace DinoRush.EditorTools
         {
             string path = AssetDatabase.GetAssetPath(model);
             var importer = AssetImporter.GetAtPath(path) as ModelImporter;
-            if (importer == null) { status = "이 파일은 3D 모델(FBX/OBJ)이 아니에요. FBX 파일을 넣어주세요."; return; }
+            bool gltf = IsGltf(path);
+            if (importer == null && !gltf) { status = "이 파일은 3D 모델이 아니에요. FBX 또는 GLB 파일을 넣어주세요."; return; }
+            if (gltf && AssetImporter.GetAtPath(path) is ModelImporter == false && AssetImporter.GetAtPath(path).GetType().Name == "DefaultImporter")
+            { status = "GLB를 읽으려면 glTFast 패키지가 필요해요.\nWindow → Package Manager → + → Add package by name → com.unity.cloud.gltfast"; return; }
             Directory.CreateDirectory(OutDir);
+            Directory.CreateDirectory(OutDir + species + "_Clips");
 
-            // 1. rig + looping
             var roleOf = new Dictionary<string, Role>();
             for (int i = 0; i < clipNames.Count; i++) roleOf[clipNames[i]] = clipRoles[i];
+            bool IsLoop(Role r) => r == Role.서있기 || r == Role.걷기 || r == Role.달리기 || r == Role.먹기;
+            List<AnimationClip> clips;
+            if (importer == null)
+            {
+                // glTF / GLB (glTFast): clips are read-only sub-assets, so save looping Mecanim copies
+                clips = new List<AnimationClip>();
+                foreach (var src in LoadClips(path))
+                {
+                    roleOf.TryGetValue(src.name, out var r);
+                    if (r == Role.안씀) continue;
+                    var c = Instantiate(src);
+                    c.name = src.name;
+                    c.legacy = false;
+                    var set = AnimationUtility.GetAnimationClipSettings(c);
+                    set.loopTime = IsLoop(r);
+                    AnimationUtility.SetAnimationClipSettings(c, set);
+                    string safe = string.Concat(src.name.Split(Path.GetInvalidFileNameChars()));
+                    string cp = $"{OutDir}{species}_Clips/{(safe.Length > 0 ? safe : "clip")}.anim";
+                    AssetDatabase.DeleteAsset(cp);
+                    AssetDatabase.CreateAsset(c, cp);
+                    clips.Add(c);
+                }
+            }
+            else
+            {
+                clips = ImportFbx(importer, path, roleOf, IsLoop);
+            }
+            LinkRest(species, path, clips, roleOf);
+        }
+
+        static List<AnimationClip> ImportFbx(ModelImporter importer, string path, Dictionary<string, Role> roleOf, System.Func<Role, bool> isLoop)
+        {
+            // 1. rig + looping
             if (importer.animationType == ModelImporterAnimationType.None || importer.animationType == ModelImporterAnimationType.Legacy)
                 importer.animationType = ModelImporterAnimationType.Generic;
             importer.importAnimation = true;
@@ -177,14 +238,17 @@ namespace DinoRush.EditorTools
             foreach (var d in defs)
             {
                 roleOf.TryGetValue(d.name, out var r);
-                bool loop = r == Role.서있기 || r == Role.걷기 || r == Role.달리기 || r == Role.먹기;
+                bool loop = isLoop(r);
                 d.loopTime = loop; d.loopPose = loop;
             }
             importer.clipAnimations = defs;
             importer.SaveAndReimport();
+            return LoadClips(path);
+        }
 
+        void LinkRest(string species, string path, List<AnimationClip> clips, Dictionary<string, Role> roleOf)
+        {
             // 2. clips by role
-            var clips = LoadClips(path);
             AnimationClip Pick(Role r) => clips.FirstOrDefault(c => roleOf.TryGetValue(c.name, out var x) && x == r);
             var idle = Pick(Role.서있기); var walk = Pick(Role.걷기); var run = Pick(Role.달리기);
             var roar = Pick(Role.포효); var attack = Pick(Role.공격); var eat = Pick(Role.먹기);
@@ -253,6 +317,7 @@ namespace DinoRush.EditorTools
             // 4. prefab
             var inst = (GameObject)Instantiate(model);
             inst.name = species;
+            foreach (var legacy in inst.GetComponentsInChildren<Animation>()) DestroyImmediate(legacy);
             var anim = inst.GetComponentInChildren<Animator>();
             if (!anim)
             {
@@ -348,7 +413,8 @@ namespace DinoRush.EditorTools
                     Texture baseTex = null;
                     if (old && old.HasProperty("_BaseMap")) baseTex = old.GetTexture("_BaseMap");
                     if (!baseTex && old && old.HasProperty("_MainTex")) baseTex = old.GetTexture("_MainTex");
-                    if (urp && baseTex) continue;
+                    bool gltfShader = old && old.shader && old.shader.name.ToLowerInvariant().Contains("gltf");
+                    if ((urp && baseTex) || gltfShader) continue;
 
                     var m = new Material(lit) { name = mname };
                     string cp = baseTex ? null : Match(colors, mname);
