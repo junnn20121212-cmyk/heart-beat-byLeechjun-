@@ -148,7 +148,8 @@ export class Director {
     {
       // a whole herd thunders in from ~110 m away, crossing the track just ahead of the cart
       const sAt = s('trike') + 26;
-      const herd = [['trike', 1.1, 0, 0], ['trike2', 0.95, 9, -5], ['trike', 1.0, 17, 4], ['trike2', 0.7, 6, 7], ['trike', 1.05, 25, -3]];
+      // every member crosses where the rails are low (~2 m), so they can bound over them
+      const herd = [['trike', 1.1, 0, 0], ['trike2', 0.95, 9, -5], ['trike', 1.0, -6, 4], ['trike2', 0.7, 5, 7], ['trike', 1.05, 12, -3]];
       herd.slice(0, q.high ? 5 : 3).forEach(([k, sc, ds, dl], i) => {
         const d = this.add(k, sc);
         this.actors.push(this.charger(d, sAt + ds, -110 + dl, 42 + dl, i === 0));
@@ -684,6 +685,39 @@ export class Director {
     const runTime = Math.abs(latA) / spd + spd / (2 * 4); // includes accelerating from a standstill
     d.place(A.x, A.y, A.z, Math.atan2(B.x - A.x, B.z - A.z));
     let state = 'wait', t = 0, bellowed = false, stepPh = 0;
+    // where the herd crosses the rails: it bounds over them instead of walking through
+    this.track.sample(sAt, this._s);
+    const P0 = this._s.p.clone(), R0 = this._s.r.clone();
+    const dirSign = Math.sign(latB - latA) || 1;
+    const halfW = 4 + 4 * (d.scale || 1);
+    const railAbove = P0.y - this.ground(P0.x, P0.z); // high track: run underneath instead
+    let jumping = false;
+    const jump = (st) => {
+      const latNow = (d.pos.x - P0.x) * R0.x + (d.pos.z - P0.z) * R0.z;
+      const u = (latNow * dirSign + halfW) / (2 * halfW);
+      if (u > 0 && u < 1 && railAbove < 2.6) {
+        const g = this.ground(d.pos.x, d.pos.z);
+        const lift = Math.max(0, P0.y + 0.4 - g) + 1.3 * (d.scale || 1);
+        d.pos.y = g + lift * Math.sin(Math.PI * u);
+        d.bodyPitch = -0.32 * Math.cos(Math.PI * u); // nose up on take-off, down on landing
+        d.headDip = -0.2;
+        if (!jumping) {
+          jumping = true;
+          this.particles.burst(d.pos.clone().add(new THREE.Vector3(0, 0.3, 0)), 45, 'dust', 4);
+          this.audio.thump(d.pos, 0.7 * (d.scale || 1));
+          if (lead) this.audio.bellow(d.headWorld(this._h), { pitch: 1.5, dur: 1.0, gain: 1.0 });
+        }
+      } else if (jumping && u >= 1) {
+        // landing: heavy thud, dust, ground shake
+        jumping = false;
+        d.bodyPitch = 0; d.headDip = 0.35;
+        this.particles.burst(d.pos.clone().add(new THREE.Vector3(0, 0.3, 0)), 70, 'dust', 5);
+        this.plume(d.pos, 3 * (d.scale || 1));
+        const dist = d.pos.distanceTo(st.cam);
+        this.audio.thump(d.pos, 1.2 * (d.scale || 1));
+        if (dist < 40) { this.fx.shake = Math.max(this.fx.shake, 0.5 * (1 - dist / 40)); try { if (navigator.vibrate) navigator.vibrate(80); } catch (e) { /* ignore */ } }
+      }
+    };
     return {
       d,
       update: (dt, st) => {
@@ -691,7 +725,7 @@ export class Director {
         if (state === 'wait') {
           d.speed = 0;
           d.headDip = 0.3;
-          if (ds < 450 && ds > 0 && this.eta(sAt, st.s) < runTime + (lead ? 0.28 : 1.3)) { state = 'run'; t = 0; d._bumped = false; }
+          if (ds < 450 && ds > 0 && this.eta(sAt, st.s) < runTime + (lead ? 0.28 : 1.3)) { state = 'run'; t = 0; d._bumped = false; jumping = false; }
         } else if (state === 'run') {
           t += dt;
           d.headDip = 0.35; // horns down
@@ -707,6 +741,7 @@ export class Director {
             d.pos.y = this.ground(d.pos.x, d.pos.z);
             if (d._stagger <= 0) { d.extraYaw = 0; d.bodyPitch = 0; }
           } else this.moveToward(d, B, spd, dt, 1.2, 4);
+          jump(st);
           if (lead) this.focus = d.pos;
           if (!bellowed && t > 0.2 + (lead ? 0 : Math.random() * 2)) { bellowed = true; this.audio.bellow(d.headWorld(this._h), { pitch: 1.3 / (d.scale || 1), dur: 1.5, gain: lead ? 1.0 : 0.6 }); if (lead) this.say('저 멀리서 트리케라톱스 무리가 돌진해 온다!'); d.roar(1.5); }
           if (d.pos.distanceTo(B) < 2) { state = 'done'; t = 0; }

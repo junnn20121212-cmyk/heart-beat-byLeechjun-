@@ -111,7 +111,7 @@ namespace DinoRush
             // 4) Triceratops stampede from ~110 m, the leader rams the cart
             {
                 float sAt = S("trike") + 26;
-                var herd = new[] { ("trike", 1.1f, 0f, 0f), ("trike", 0.95f, 9f, -5f), ("trike", 1.0f, 17f, 4f), ("trike", 0.7f, 6f, 7f), ("trike", 1.05f, 25f, -3f) };
+                var herd = new[] { ("trike", 1.1f, 0f, 0f), ("trike", 0.95f, 9f, -5f), ("trike", 1.0f, -6f, 4f), ("trike", 0.7f, 5f, 7f), ("trike", 1.05f, 12f, -3f) };
                 for (int i = 0; i < (lowQuality ? 3 : 5); i++)
                     actors.Add(new Charger(this, Add(herd[i].Item1, herd[i].Item2), sAt + herd[i].Item3, -110 + herd[i].Item4, 42 + herd[i].Item4, i == 0));
             }
@@ -302,7 +302,8 @@ namespace DinoRush
         class Charger : Base
         {
             readonly float sAt, spd, runTime; readonly bool lead; Vector3 A, B;
-            string state = "wait"; bool bellowed, bumped; float stagger, staggerSide;
+            string state = "wait"; bool bellowed, bumped, jumping; float stagger, staggerSide;
+            readonly Vector3 P0, R0; readonly float dirSign, halfW, railAbove;
             public Charger(EncounterDirector e, DinoActor a, float sAt, float latA, float latB, bool lead) : base(e, a)
             {
                 this.sAt = sAt; this.lead = lead;
@@ -310,6 +311,32 @@ namespace DinoRush
                 spd = 11.5f * Mathf.Pow(a.scale, 0.3f);
                 runTime = Mathf.Abs(latA) / spd + spd / 8f; // includes accelerating from a standstill
                 d.Place(A, Mathf.Atan2(B.x - A.x, B.z - A.z));
+                var sm0 = e.T.Sample(sAt);
+                P0 = sm0.p; R0 = sm0.r;
+                dirSign = Mathf.Sign(latB - latA);
+                halfW = 4 + 4 * a.scale;
+                railAbove = P0.y - e.Ground(P0);
+            }
+
+            // bound over the rails where they cross the track (only where the rails are low)
+            void Jump()
+            {
+                float latNow = (d.pos.x - P0.x) * R0.x + (d.pos.z - P0.z) * R0.z;
+                float u = (latNow * dirSign + halfW) / (2 * halfW);
+                if (u > 0 && u < 1 && railAbove < 2.6f)
+                {
+                    float g = E.Ground(d.pos);
+                    float lift = Mathf.Max(0, P0.y + 0.4f - g) + 1.3f * d.scale;
+                    d.pos.y = g + lift * Mathf.Sin(Mathf.PI * u);
+                    if (!jumping) { jumping = true; if (E.audioDir) E.audioDir.Thump(d.pos, 0.7f); d.Trigger("Attack"); }
+                }
+                else if (jumping && u >= 1)
+                {
+                    jumping = false;
+                    float dist = Vector3.Distance(d.pos, E.Cam);
+                    if (E.audioDir) E.audioDir.Thump(d.pos, 1.2f);
+                    if (dist < 40) { E.ride.Shake(0.5f * (1 - dist / 40)); Haptics.Buzz(80); }
+                }
             }
             public override void Tick(float dt)
             {
@@ -317,7 +344,7 @@ namespace DinoRush
                 if (state == "wait")
                 {
                     d.speed = 0; d.SetEat(true);
-                    if (ds < 450 && ds > 0 && E.T.Eta(sAt, E.ride.S) < runTime + (lead ? 0.28f : 1.3f)) { state = "run"; t = 0; bumped = false; d.SetEat(false); }
+                    if (ds < 450 && ds > 0 && E.T.Eta(sAt, E.ride.S) < runTime + (lead ? 0.28f : 1.3f)) { state = "run"; t = 0; bumped = false; jumping = false; d.SetEat(false); }
                 }
                 else if (state == "run")
                 {
@@ -330,6 +357,7 @@ namespace DinoRush
                         d.pos += new Vector3(Mathf.Sin(d.heading), 0, Mathf.Cos(d.heading)) * d.speed * dt; d.pos.y = E.Ground(d.pos);
                     }
                     else d.MoveToward(B, spd, dt, 1.2f, 4);
+                    Jump();
                     if (!bellowed && t > 0.2f) { bellowed = true; if (E.audioDir) E.audioDir.Bellow(d.HeadPos, 1.3f / d.scale); if (lead) E.Say("저 멀리서 트리케라톱스 무리가 돌진해 온다!"); }
                     if (!bumped && Vector3.Distance(d.pos, E.Cam) < (lead ? 8 : 6))
                     {
