@@ -133,7 +133,7 @@ export class Director {
 
     // 4) SPINOSAURUS rising from the river at the splash
     {
-      const sAt = this.waterSpan[1] - 4; // strikes at the end of the river, right after the mosasaurus
+      const sAt = this.world.underRange ? this.world.underRange[1] + 10 : this.waterSpan[1] - 4; // strikes as the cart surfaces
       const d = this.add('spino', 1.0);
       this.actors.push(this.riser(d, sAt, -6.5));
     }
@@ -364,8 +364,9 @@ export class Director {
     const T = this.track, s = n => T.sOf(n);
     // Mosasaurus: bursts out of the river the coaster skims and arcs right over the rider
     {
-      const [w0, w1] = this.waterSpan;
-      this.actors.push(this.mosaLeap(this.add('mosa', 1.5), w0 + 2, Math.min(w1, w0 + 30)));
+      const U = this.world.underRange;
+      if (U) this.actors.push(this.mosaDive(this.add('mosa', 1.5), U[0], U[1]));
+      else { const [w0, w1] = this.waterSpan; this.actors.push(this.mosaLeap(this.add('mosa', 1.5), w0 + 2, Math.min(w1, w0 + 30))); }
     }
     // Dilophosaurus in the middle of the helix, spitting at the cart as it circles
     {
@@ -420,6 +421,71 @@ export class Director {
             this.fx.shake = Math.max(this.fx.shake, 0.25);
           }
           if (k >= 1) { state = 'under'; d._s1 = d._s2 = false; d.bodyPitch = 0; }
+        }
+      },
+    };
+  }
+
+  // breaches ahead of the cart, then hunts it underwater beside the glass tube and rams it
+  mosaDive(d, w0, w1) {
+    let state = 'wait', t = 0, lunged = false;
+    const T = this.track, wp = new THREE.Vector3();
+    d.place(0, -60, 0, 0);
+    return {
+      d,
+      update: (dt, st) => {
+        const ds0 = this.dsTo(w0, st.s), ds1 = this.dsTo(w1, st.s);
+        if (state === 'wait') {
+          d.pos.y = -60;
+          if (ds0 > 0 && ds0 < 120 && this.eta(w0, st.s) < 1.5) { state = 'breach'; t = 0; d._a = d._c = false; }
+        } else if (state === 'breach') {
+          // a warning leap straight up out of the pool, right where the track goes under
+          t += dt;
+          const k = clamp(t / 1.5, 0, 1);
+          this.trackPoint(w0 + 10, 6, wp, false);
+          T.sample(w0 + 10, this._s);
+          d.pos.set(wp.x, -8 + 15 * Math.sin(Math.PI * k), wp.z);
+          d.heading = Math.atan2(this._s.t.x, this._s.t.z) + 0.6;
+          d.bodyPitch = lerp(-1.3, 1.2, k);
+          d.jawTarget = k < 0.6 ? 1 : 0.2; d.speed = 6;
+          this.focus = d.pos;
+          if (k > 0.1 && !d._a) {
+            d._a = true;
+            this.particles.burst(new THREE.Vector3(wp.x, 0.2, wp.z), 260, 'water', 13);
+            for (let i = 0; i < 6; i++) this.plume(new THREE.Vector3(wp.x + (Math.random() - 0.5) * 8, Math.random() * 3, wp.z + (Math.random() - 0.5) * 8), 6, 0xe8f0f2);
+            this.audio.splash(1.3); this.audio.roar(d.headWorld(this._h), { pitch: 0.5, size: 2, dur: 2.2 });
+            this.say('모사사우루스다! 그리고 우리는… 물속으로!');
+          }
+          if (k > 0.9 && !d._c) { d._c = true; this.particles.burst(new THREE.Vector3(wp.x, 0.2, wp.z), 300, 'water', 14); this.audio.splash(1.4); }
+          if (k >= 1) { state = 'swim'; t = 0; d.bodyPitch = 0; }
+        } else if (state === 'swim') {
+          // glides alongside the tube, circles ahead, then lunges at the glass
+          t += dt;
+          const mid = ds0 < 0 && ds1 > 0;
+          const lungeK = lunged ? 0 : clamp((t - 1.2) / 0.6, 0, 1);
+          const lat = lerp(5.6, 3.0, lungeK * lungeK);
+          T.sample(st.s + 6 - lungeK * 4, this._s);
+          d.pos.copy(this._s.p).addScaledVector(this._s.r, lat).addScaledVector(this._s.u, 0.8 + Math.sin(t * 1.5) * 0.4);
+          d.heading = Math.atan2(this._s.t.x, this._s.t.z) - lungeK * 1.2;
+          d.bodyPitch = Math.sin(t * 1.2) * 0.08;
+          d.speed = 4; d.jawTarget = lungeK > 0.3 ? 1 : 0.15;
+          d.look = st.cam; d.lookW = lungeK;
+          this.focus = d.pos; this.tension = 1;
+          if (!lunged && lungeK >= 1) {
+            lunged = true;
+            this.fx.crack = 1; this.fx.shake = Math.max(this.fx.shake, 1.2); this.fx.wobble = 0.6;
+            this.fx.kick = (this.fx.kick || 0) - 1.2;
+            this.audio.crash(st.cam, 0.8); this.audio.thump(st.cam, 1.3);
+            try { if (navigator.vibrate) navigator.vibrate([200, 50, 300]); } catch (e) { /* ignore */ }
+            this.say('쾅! 유리에 금이 갔다!!');
+          }
+          if (!mid && t > 1) { state = 'gone'; t = 0; }
+        } else if (state === 'gone') {
+          // sinks away into the deep
+          t += dt;
+          d.pos.y -= dt * 3; d.pos.addScaledVector(new THREE.Vector3(Math.sin(d.heading), 0, Math.cos(d.heading)), dt * 6);
+          if (t > 4) { d.pos.y = -60; }
+          if (Math.abs(ds0) > 300) { state = 'wait'; lunged = false; }
         }
       },
     };

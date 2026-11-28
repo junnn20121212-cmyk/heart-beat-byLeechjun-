@@ -10,7 +10,7 @@ namespace DinoRush
     [Serializable] public class TrackPointJson { public string name; public float x, y, z; }
     [Serializable] public class TrackJson { public TrackPointJson[] points; }
 
-    public enum Zone : byte { Free = 0, Station = 1, Lift = 2, Drive = 3, Launch = 4, Brake = 5, Trim = 6 }
+    public enum Zone : byte { Free = 0, Station = 1, Lift = 2, Drive = 3, Launch = 4, Brake = 5, Trim = 6, Water = 7 }
 
     public struct TrackSample
     {
@@ -131,6 +131,7 @@ namespace DinoRush
             SetRange("launch", SOf("tunnelOut"), SOf("tunnelOut") + 50);
             SetRange("roll", SOf("tunnelOut") + 56, SOf("tunnelOut") + 100);
             SetRange("roll2", SOf("raptor1") + 4, SOf("raptor1") + 36);
+            SetRange("water", SOf("splash") + 6, SOf("splash2") + 4);
             SetRange("trim", SOf("trim") - 22, SOf("trim") - 6);
             SetRange("brake", SOf("brake"), length);
             SetRange("station", 0, SOf("liftStart") + 6);
@@ -142,6 +143,7 @@ namespace DinoRush
             Mark(ranges["drive"], Zone.Drive);
             Mark(ranges["launch"], Zone.Launch);
             Mark(ranges["trim"], Zone.Trim);
+            Mark(ranges["water"], Zone.Water);
         }
 
         public bool InRange(float s, string key)
@@ -171,6 +173,7 @@ namespace DinoRush
                         case Zone.Lift: nv = Mathf.Max(5.2f, Mathf.Sqrt(Mathf.Max(v2 - 2 * 2.4f * ds, 0))); break;
                         case Zone.Drive: nv = 16f; break;
                         case Zone.Launch: nv = Mathf.Min(33f, Mathf.Sqrt(v * v + 2 * 15f * ds)); break;
+                        case Zone.Water: nv = Mathf.Max(12f, Mathf.Min(nv, Mathf.Sqrt(Mathf.Max(v * v - 2 * 14f * ds, 0)))); break;
                         case Zone.Trim: nv = Mathf.Max(14f, Mathf.Min(nv, Mathf.Sqrt(Mathf.Max(v * v - 2 * 6f * ds, 0)))); break;
                         case Zone.Brake:
                             float target = j * ds > brake2 ? 3.2f : 7.5f;

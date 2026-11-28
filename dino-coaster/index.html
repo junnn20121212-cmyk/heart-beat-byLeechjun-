@@ -60,6 +60,7 @@ details li{margin:3px 0}
 #prog{height:100%;width:0;background:var(--amber)}
 #fps{position:fixed;left:12px;bottom:10px;font-size:11px;opacity:.45;pointer-events:none}
 #flash{position:fixed;inset:0;pointer-events:none;background:radial-gradient(circle,rgba(160,0,0,0) 30%,rgba(190,10,0,.95) 100%);opacity:0}
+#under{position:fixed;inset:0;pointer-events:none;opacity:0;transition:opacity .4s;background:radial-gradient(ellipse 120% 70% at 50% -10%,rgba(150,230,255,.22),rgba(0,60,80,.18) 55%,rgba(0,20,30,.5))}
 #gvig{position:fixed;inset:0;pointer-events:none;opacity:0;background:radial-gradient(ellipse at center,rgba(0,0,0,0) 38%,rgba(0,0,0,.95) 100%)}
 #drops{position:fixed;inset:0;pointer-events:none;opacity:0}
 #drops i{position:absolute;border-radius:50%;background:radial-gradient(circle at 35% 30%,rgba(255,255,255,.55),rgba(200,225,235,.18) 45%,rgba(120,150,160,.08) 70%,rgba(0,0,0,0));box-shadow:inset -2px -3px 4px rgba(0,0,0,.15)}
@@ -73,7 +74,7 @@ details li{margin:3px 0}
 #end h2{font-family:"Black Han Sans",sans-serif;font-weight:400;font-size:44px;margin:0 0 6px;color:var(--amber)}
 #vrExit{position:fixed;top:max(8px,env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);display:none;min-height:36px;padding:4px 14px;font-size:13px;opacity:.55;z-index:5}
 body.vr #vrExit{display:block}
-body.vr #hud,body.vr #fps,body.vr .progress,body.vr #toast,body.vr #flash,body.vr #gvig,body.vr #drops{display:none}
+body.vr #hud,body.vr #fps,body.vr .progress,body.vr #toast,body.vr #flash,body.vr #gvig,body.vr #drops,body.vr #under{display:none}
 #vrDivider{position:fixed;left:50%;top:0;bottom:0;width:2px;margin-left:-1px;background:#000;display:none;pointer-events:none}
 body.vr #vrDivider{display:block}
 @media (min-width:900px) and (min-aspect-ratio:4/3){
@@ -100,6 +101,7 @@ body.vr #vrDivider{display:block}
 <body>
 <div id="view"></div>
 <div id="vrDivider"></div>
+<div id="under"></div>
 <div id="gvig"></div>
 <div id="drops"></div>
 <div id="flash"></div>
@@ -124,6 +126,9 @@ body.vr #vrDivider{display:block}
     <div class="opts">
       <label>화질 <select id="qual"><option value="high">높음 (PC)</option><option value="low">보통 (휴대폰)</option></select></label>
       <label><input type="checkbox" id="gyroToggle" checked> 일반 모드에서 자이로</label>
+      <label><input type="checkbox" id="optAutoLook"> 자동 시점 (공룡 쪽으로)</label>
+      <label><input type="checkbox" id="optFov" checked> 속도감 시야 확대</label>
+      <label><input type="checkbox" id="optShake" checked> 흔들림·관성</label>
       <label><input type="checkbox" id="lens" checked> VR 렌즈 왜곡 보정</label>
     </div>
     <details>
@@ -142,6 +147,7 @@ body.vr #vrDivider{display:block}
   <div class="meter"><div><b id="spd">0</b><span>km/h</span></div><div><b id="gf">1.0</b><span>G</span></div></div>
   <div class="hudbtns">
     <button class="ghost" id="btnCenter">정면</button>
+    <button class="ghost" id="btnAuto">자동시점 꺼짐</button>
     <button class="ghost" id="btnMute">소리 끄기</button>
     <button class="ghost" id="btnExit">나가기</button>
   </div>

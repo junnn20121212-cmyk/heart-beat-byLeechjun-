@@ -9,6 +9,7 @@ const CELL = (HALF * 2) / RES;
 export const VOLCANO = { x: 470, z: -330 };
 const RIVER = [[760, 430], [520, 330], [330, 250], [230, 205], [165, 168], [128, 150], [92, 126], [62, 106]];
 const LAKE = { x: 45, z: 92, r: 34 };
+export const POOL = { x: 127, z: 152, r: 22 }; // deep river pool for the underwater section
 export const LINEUP = { x: -60, z: 105 };
 
 function distToPolyline(x, z, pts) {
@@ -63,6 +64,8 @@ export class World {
     // river & lake
     const dr = distToPolyline(x, z, RIVER);
     if (dr < 40) h = lerp(-2.6, h, smoothstep(9, 30, dr));
+    const dp = Math.hypot(x - POOL.x, z - POOL.z);
+    if (dp < POOL.r + 30) h = Math.min(h, lerp(-10, h, smoothstep(POOL.r - 4, POOL.r + 26, dp + 4 * this.n1(x * 0.06, z * 0.06))));
     const dl = Math.hypot(x - LAKE.x, z - LAKE.z);
     if (dl < 70) h = lerp(-4.5, h, smoothstep(LAKE.r - 4, LAKE.r + 26, dl + 6 * this.n2(x * 0.05, z * 0.05)));
     // station flat pad
@@ -271,7 +274,7 @@ export class World {
     const mat = new THREE.MeshStandardMaterial({
       color: new THREE.Color().setRGB(0.10, 0.20, 0.17, THREE.SRGBColorSpace),
       roughness: 0.06, metalness: 0.15, normalMap: nrm, normalScale: new THREE.Vector2(0.35, 0.35),
-      transparent: true, opacity: 0.86, envMapIntensity: 1.3,
+      transparent: true, opacity: 0.86, envMapIntensity: 1.3, side: THREE.DoubleSide,
     });
     const water = new THREE.Mesh(new THREE.PlaneGeometry(HALF * 2, HALF * 2).rotateX(-Math.PI / 2), mat);
     water.position.y = 0;
@@ -923,6 +926,93 @@ export class World {
     }
     this.batRun = { sStart: tr.sOf('tunnelIn') + 4, t: -1 };
     this.caveRange = [s0, s1];
+  }
+
+  // ---------- underwater glass tube, kelp, rocks, light shafts ----------
+  buildUnderwater() {
+    const tr = this.track, hi = this.q.high;
+    // underwater stretch of track
+    let w0 = -1, w1 = -1;
+    for (let s = tr.sOf('splash') - 30; s < tr.sOf('splash2') + 40; s += 0.5) {
+      const i = Math.round(tr.wrap(s) / tr.ds);
+      if (tr.P[i * 3 + 1] + 2.6 < 0.2) { if (w0 < 0) w0 = s; w1 = s; }
+    }
+    if (w0 < 0) return;
+    this.underRange = [w0, w1];
+    const smp = { p: new THREE.Vector3(), t: new THREE.Vector3(), r: new THREE.Vector3(), u: new THREE.Vector3() };
+    const a0 = tr.wrap(w0 - 4), a1 = tr.wrap(w1 + 4);
+    // tube shell
+    {
+      const N = 28, step = 0.6, R = 2.5, rings = Math.floor((a1 - a0) / step) + 1;
+      const pos = [], idx = [];
+      for (let k = 0; k < rings; k++) {
+        tr.sample(a0 + k * step, smp);
+        const c = smp.p.clone().addScaledVector(smp.u, 1.0);
+        for (let j = 0; j <= N; j++) {
+          const a = j / N * Math.PI * 2, ca = Math.cos(a), sa = Math.sin(a);
+          pos.push(c.x + (smp.r.x * ca + smp.u.x * sa) * R, c.y + (smp.r.y * ca + smp.u.y * sa) * R, c.z + (smp.r.z * ca + smp.u.z * sa) * R);
+        }
+      }
+      for (let k = 0; k < rings - 1; k++) for (let j = 0; j < N; j++) { const q = k * (N + 1) + j, w = q + N + 1; idx.push(q, w, q + 1, q + 1, w, w + 1); }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals();
+      const glass = new THREE.MeshStandardMaterial({ color: 0xbfe8ff, roughness: 0.04, metalness: 0.2, transparent: true, opacity: 0.13, side: THREE.DoubleSide, depthWrite: false, envMapIntensity: 1.5 });
+      const m = new THREE.Mesh(g, glass);
+      m.renderOrder = 5;
+      this.scene.add(m);
+      // steel hoops holding the glass
+      const hoopMat = new THREE.MeshStandardMaterial({ color: 0x6c7378, metalness: 0.9, roughness: 0.35 });
+      const parts = [];
+      for (let s = a0; s < a1; s += 3) {
+        tr.sample(s, smp);
+        const h = new THREE.TorusGeometry(R + 0.04, 0.06, 6, 28);
+        const q = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(smp.r, smp.u, smp.t));
+        h.applyQuaternion(q);
+        const c = smp.p.clone().addScaledVector(smp.u, 1.0);
+        h.translate(c.x, c.y, c.z);
+        parts.push(h);
+      }
+      this.scene.add(new THREE.Mesh(mergeGeos(parts), hoopMat));
+    }
+    // kelp forest and rocks on the pool floor
+    {
+      const r = rng(77);
+      const kelpMat = new THREE.MeshStandardMaterial({ color: 0x3f6a2a, roughness: 0.8, side: THREE.DoubleSide, transparent: true, opacity: 0.95 });
+      this.kelp = [];
+      for (let i = 0; i < (hi ? 70 : 35); i++) {
+        const a = r() * Math.PI * 2, d = 4 + r() * (POOL.r - 4);
+        const x = POOL.x + Math.cos(a) * d, z = POOL.z + Math.sin(a) * d;
+        const g0 = this.heightAt(x, z);
+        if (g0 > -2) continue;
+        const near = tr.nearestXZ(x, z, 4);
+        if (near) continue;
+        const H = Math.min(-g0 - 0.6, 3 + r() * 5);
+        const geo = new THREE.PlaneGeometry(0.35, H, 1, 8).translate(0, H / 2, 0);
+        const m = new THREE.Mesh(geo, kelpMat);
+        m.position.set(x, g0, z); m.rotation.y = r() * 3;
+        this.scene.add(m);
+        this.kelp.push({ m, ph: r() * 6, base: geo.attributes.position.array.slice() });
+      }
+      const rockMat = new THREE.MeshStandardMaterial({ color: 0x55584f, roughness: 0.9 });
+      for (let i = 0; i < 18; i++) {
+        const a = r() * Math.PI * 2, d = 3 + r() * POOL.r;
+        const x = POOL.x + Math.cos(a) * d, z = POOL.z + Math.sin(a) * d;
+        const g = new THREE.IcosahedronGeometry(0.5 + r() * 1.2, 0);
+        const m = new THREE.Mesh(g, rockMat);
+        m.position.set(x, this.heightAt(x, z), z); m.rotation.set(r() * 3, r() * 3, r() * 3); m.scale.y = 0.6;
+        this.scene.add(m);
+      }
+      this.animated.push(t => {
+        for (const k of this.kelp) {
+          const p = k.m.geometry.attributes.position;
+          for (let i = 0; i < p.count; i++) {
+            const y = k.base[i * 3 + 1];
+            p.setX(i, k.base[i * 3] + Math.sin(t * 1.1 + k.ph + y * 0.5) * 0.12 * y);
+          }
+          p.needsUpdate = true;
+        }
+      });
+    }
   }
 
   // no grass or ferns inside the cave

@@ -19,7 +19,9 @@ export class AudioEngine {
     this.master.gain.value = 0.9;
     const comp = ctx.createDynamicsCompressor();
     comp.threshold.value = -14; comp.ratio.value = 4; comp.attack.value = 0.005; comp.release.value = 0.25;
-    this.master.connect(comp); comp.connect(ctx.destination);
+    // underwater muffle: everything passes a low-pass that closes when submerged
+    this.muffle = ctx.createBiquadFilter(); this.muffle.type = 'lowpass'; this.muffle.frequency.value = 20000;
+    this.master.connect(this.muffle); this.muffle.connect(comp); comp.connect(ctx.destination);
     // tunnel / canyon reverb send
     {
       const len = Math.floor(ctx.sampleRate * 1.8);
@@ -231,6 +233,13 @@ export class AudioEngine {
     g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.35);
     o.connect(g); g.connect(this.panner(pos, 12));
     o.start(t0); o.stop(t0 + 0.4);
+  }
+
+  setUnder(on) {
+    if (!this.ctx || this._under === on) return;
+    this._under = on;
+    this.muffle.frequency.setTargetAtTime(on ? 520 : 20000, this.ctx.currentTime, 0.12);
+    this.splash(0.8);
   }
 
   splash(gain = 1) {

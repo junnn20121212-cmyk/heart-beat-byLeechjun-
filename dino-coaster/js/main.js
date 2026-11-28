@@ -68,7 +68,7 @@ class Particles {
       this.life[i] -= dt;
       const d = Math.max(0, 1 - this.drag[i] * dt);
       this.vel[i * 3] *= d; this.vel[i * 3 + 2] *= d;
-      this.vel[i * 3 + 1] = this.vel[i * 3 + 1] * d - 9.8 * dt * (this.drag[i] > 1 ? 0.15 : 1);
+      this.vel[i * 3 + 1] = this.vel[i * 3 + 1] * d + (this.drag[i] >= 3 ? 2.5 * dt : -9.8 * dt * (this.drag[i] > 1 ? 0.15 : 1)); // drag >= 3: buoyant bubbles
       this.pos[i * 3] += this.vel[i * 3] * dt;
       this.pos[i * 3 + 1] += this.vel[i * 3 + 1] * dt;
       this.pos[i * 3 + 2] += this.vel[i * 3 + 2] * dt;
@@ -136,6 +136,32 @@ function makeSplat() {
   return { mesh, paint, k: 0, drip: 0 };
 }
 
+// ---------------- cracked glass overlay ----------------
+function makeCrack() {
+  const c = document.createElement('canvas'); c.width = 512; c.height = 512;
+  const tex = TX.toTexture(c);
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.62), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false, fog: false, toneMapped: false, opacity: 0 }));
+  mesh.renderOrder = 996; mesh.visible = false;
+  const paint = () => {
+    const ctx = c.getContext('2d');
+    ctx.clearRect(0, 0, 512, 512);
+    const cx = 256, cy = 256;
+    ctx.strokeStyle = 'rgba(235,250,255,0.9)'; ctx.lineCap = 'round';
+    for (let i = 0; i < 16; i++) {
+      let a = i / 16 * Math.PI * 2 + Math.random() * 0.3, x = cx, y = cy, w = 3;
+      ctx.beginPath(); ctx.moveTo(x, y);
+      for (let k = 0; k < 7; k++) { a += (Math.random() - 0.5) * 0.6; x += Math.cos(a) * (20 + Math.random() * 25); y += Math.sin(a) * (20 + Math.random() * 25); ctx.lineWidth = w; ctx.lineTo(x, y); w *= 0.8; }
+      ctx.stroke();
+    }
+    for (let r = 30; r < 200; r += 45 + Math.random() * 30) { ctx.lineWidth = 1.2; ctx.beginPath(); for (let a = 0; a <= Math.PI * 2 + 0.01; a += 0.35) { const rr = r * (0.85 + Math.random() * 0.3); ctx.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr); } ctx.stroke(); }
+    const g = ctx.createRadialGradient(cx, cy, 2, cx, cy, 40); g.addColorStop(0, 'rgba(255,255,255,0.8)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, 512, 512);
+    tex.needsUpdate = true;
+  };
+  mesh.position.set(-0.12, 0.02, -0.4);
+  return { mesh, paint, k: 0 };
+}
+
 // ---------------- floating text sign (works in VR) ----------------
 class Billboard {
   constructor() {
@@ -172,9 +198,11 @@ const app = {
   fx: { shake: 0, flash: 0, fade: 1 },
   useGyro: false,
   muted: false,
+  // viewer preferences (remembered on this device)
+  opt: (() => { try { return Object.assign({ autoLook: false, fov: true, shake: true }, JSON.parse(localStorage.getItem('dino-opt') || '{}')); } catch (e) { return { autoLook: false, fov: true, shake: true }; } })(),
 };
 
-let splat, riders, inertia, holdS, menuCam, dust, renderer, scene, camera, track, world, director, audio, stereo, gyro, particles, carts, billboard, headlight, lapS0;
+let crack, splat, riders, inertia, holdS, menuCam, dust, renderer, scene, camera, track, world, director, audio, stereo, gyro, particles, carts, billboard, headlight, lapS0;
 const smp = { p: new THREE.Vector3(), t: new THREE.Vector3(), r: new THREE.Vector3(), u: new THREE.Vector3() };
 const smp2 = { p: new THREE.Vector3(), t: new THREE.Vector3(), r: new THREE.Vector3(), u: new THREE.Vector3() };
 
@@ -220,6 +248,7 @@ async function init() {
   scene.add(buildTrackMeshes(track, world, Q));
   world.buildStation();
   world.buildTunnel();
+  world.buildUnderwater();
   world.buildVolcano();
 
   setProgress(0.5, '정글 식생 심는 중');
@@ -255,6 +284,8 @@ async function init() {
   billboard.mesh.material.opacity = 0.9;
   splat = makeSplat();
   camera.add(splat.mesh);
+  crack = makeCrack();
+  camera.add(crack.mesh);
   camera.add(billboard.mesh);
 
   stereo = new StereoRenderer(renderer, Q.high);
@@ -431,6 +462,14 @@ function setupInput() {
     const u = new URL(location.href); u.searchParams.set('q', e.target.value); location.href = u.toString();
   };
   $('lens').onchange = e => { stereo.distort = e.target.checked; };
+  const saveOpt = () => { try { localStorage.setItem('dino-opt', JSON.stringify(app.opt)); } catch (e) { /* ignore */ } };
+  const syncAuto = () => { $('btnAuto').textContent = app.opt.autoLook ? '자동시점 켜짐' : '자동시점 꺼짐'; $('optAutoLook').checked = app.opt.autoLook; };
+  $('optAutoLook').checked = app.opt.autoLook; $('optFov').checked = app.opt.fov; $('optShake').checked = app.opt.shake;
+  $('optAutoLook').onchange = e => { app.opt.autoLook = e.target.checked; saveOpt(); syncAuto(); };
+  $('optFov').onchange = e => { app.opt.fov = e.target.checked; saveOpt(); };
+  $('optShake').onchange = e => { app.opt.shake = e.target.checked; saveOpt(); };
+  $('btnAuto').onclick = () => { app.opt.autoLook = !app.opt.autoLook; saveOpt(); syncAuto(); toast(app.opt.autoLook ? '자동 시점 켜짐' : '자동 시점 꺼짐'); };
+  syncAuto();
 }
 
 function onResize() {
@@ -516,11 +555,11 @@ function loop(now) {
   const gq = app.useGyro ? gyro.read(headQ) : null;
   if (!gq) headQ.identity();
   // gentle look-assist toward danger when the user is not steering (mouse/touch only)
-  if (!app.useGyro && director.focus && time - app.lastDrag > 2.5 && app.state === 'ride') {
+  if (app.opt.autoLook && !app.useGyro && director.focus && time - app.lastDrag > 2.5 && app.state === 'ride') {
     const local = carts.front.worldToLocal(director.focus.clone());
     const want = THREE.MathUtils.clamp(Math.atan2(-local.x, -local.z), -0.9, 0.9);
     app.yaw += (-want - app.yaw) * Math.min(1, dt * 0.9);
-  } else if (!app.useGyro && !app.dragging && time - app.lastDrag > 4) {
+  } else if (app.opt.autoLook && !app.useGyro && !app.dragging && time - app.lastDrag > 4) {
     app.yaw *= 1 - Math.min(1, dt * 0.6);
     app.pitch *= 1 - Math.min(1, dt * 0.6);
   }
@@ -533,7 +572,7 @@ function loop(now) {
   // speed sensation: widen the view with speed (not in VR, where FOV is fixed by the lenses)
   app.fovKick = Math.max(0, (app.fovKick || 0) - dt * 4);
   if (app.mode === 'normal') {
-    const want = app.baseFov + THREE.MathUtils.clamp((app.v - 12) * 0.5, 0, 14) + app.fovKick;
+    const want = app.baseFov + (app.opt.fov ? THREE.MathUtils.clamp((app.v - 12) * 0.5, 0, 14) + app.fovKick : 0);
     camera.fov += (want - camera.fov) * Math.min(1, dt * 3);
     camera.updateProjectionMatrix();
   }
@@ -544,11 +583,11 @@ function loop(now) {
     app.fx.vig = (app.fx.vig || 0) + (want - (app.fx.vig || 0)) * Math.min(1, dt * 4);
     $('gvig').style.opacity = app.mode === 'normal' ? app.fx.vig.toFixed(3) : 0;
   }
-  const sh = base + app.fx.shake * (app.mode === 'vr' ? 0.035 : 0.06);
+  const sh = (base + app.fx.shake * (app.mode === 'vr' ? 0.035 : 0.06)) * (app.opt.shake ? 1 : 0.25);
   tmpE.set(Math.sin(time * 41) * sh + Math.sin(time * 23.7) * sh * 0.6, Math.sin(time * 37.3) * sh * 0.7, Math.sin(time * 29.1) * sh * 0.5);
   shakeQ.setFromEuler(tmpE);
   // head inertia: the body lags behind every push of the cart
-  inertia.update(dt, smp.t, smp.r, smp.u, app.v, app.mode === 'vr' ? 0.55 : 1);
+  inertia.update(dt, smp.t, smp.r, smp.u, app.v, (app.mode === 'vr' ? 0.55 : 1) * (app.opt.shake ? 1 : 0.15));
   if (app.fx.kick) {
     // a side impact (triceratops) shoves the cart and snaps the head sideways
     const k = app.fx.kick * (app.mode === 'vr' ? 0.6 : 1);
@@ -638,6 +677,20 @@ function loop(now) {
   // ---- fx ----
   app.fx.flash = Math.max(0, app.fx.flash - dt * 2.2);
   if (app.fx.drops) { app.fx.drops = 0; splashDrops(); }
+  if (app.fx.crack) { app.fx.crack = 0; crack.paint(); crack.k = 1; }
+  if (crack.k > 0) { crack.k = Math.max(0, crack.k - dt * 0.25); crack.mesh.material.opacity = Math.min(1, crack.k * 2); crack.mesh.visible = true; } else crack.mesh.visible = false;
+  // underwater: blue haze, short visibility, bubbles, muffled sound
+  {
+    const under = camWorld.y < -0.05;
+    if (!app.fogBase) app.fogBase = scene.fog.density;
+    if (under) {
+      scene.fog.color.setRGB(0.05, 0.24, 0.28);
+      scene.fog.density = 0.03;
+      if (Math.random() < dt * 30) particles.spawn(camWorld.clone().add(new THREE.Vector3((Math.random() - 0.5) * 4, -1.5 + Math.random(), (Math.random() - 0.5) * 4)), new THREE.Vector3((Math.random() - 0.5) * 0.3, 1.2 + Math.random(), (Math.random() - 0.5) * 0.3), [0.75, 0.9, 1], 1.2, 3);
+    } else scene.fog.density = app.lite ? 0.0042 : app.fogBase;
+    audio.setUnder && audio.setUnder(under);
+    $('under').style.opacity = under && app.mode === 'normal' ? '1' : '0';
+  }
   if (app.fx.splat) { splat.paint(); splat.k = 1; splat.drip = 0; app.fx.splat = 0; splat.mesh.position.set((Math.random() - 0.5) * 0.12, (Math.random() - 0.5) * 0.06, -0.34); }
   if (splat.k > 0) {
     splat.k = Math.max(0, splat.k - dt * 0.38);

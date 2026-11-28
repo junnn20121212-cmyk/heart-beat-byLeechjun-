@@ -43,10 +43,15 @@ add(null, [195, 8, 42]);
 add(null, [206, 17, 70]);
 add('hill', [200, 25, 96]);
 add(null, [182, 13, 118]);
-add(null, [160, 5, 135]);
-add('splash', [138, 1.3, 147]);
-add('splash2', [118, 1.3, 156]);
-add(null, [98, 3, 166]);
+// river plunge: the track dives ~4 m under the surface through a glass tube
+add(null, [163, 6, 134]);
+add('splash', [151, 1.2, 138.5]);
+add('dive', [137, -3.4, 140.5]);
+add(null, [125, -4.3, 139.5]);
+add(null, [114, -4.1, 147]);
+add('splash2', [112, -3.8, 159]);
+add(null, [106, 0.3, 168]);
+add(null, [95, 3.5, 172]);
 add('lift2Start', [78, 7, 176]);
 add(null, [58, 19, 186]);
 add('brachio', [38, 31, 196]);
@@ -169,6 +174,7 @@ export class Track {
       launch: [s('tunnelOut'), s('tunnelOut') + 50],
       roll: [s('tunnelOut') + 56, s('tunnelOut') + 100],
       roll2: [s('raptor1') + 4, s('raptor1') + 36],
+      water: [s('splash') + 6, s('splash2') + 4],
       trim: [s('trim') - 22, s('trim') - 6],
       brake: [s('brake'), this.length],
       station: [0, s('liftStart') + 6],
@@ -182,6 +188,7 @@ export class Track {
     mark(r.drive[0], r.drive[1], 3);
     mark(r.launch[0], r.launch[1], 4);
     mark(r.trim[0], r.trim[1], 6);
+    mark(r.water[0], r.water[1], 7);
   }
 
   _simulate() {
@@ -204,6 +211,7 @@ export class Track {
         }
         else if (z === 3) nv = 16;
         else if (z === 4) nv = Math.min(33, Math.sqrt(v * v + 2 * 15 * ds));
+        else if (z === 7) nv = Math.max(12, Math.min(nv, Math.sqrt(Math.max(v * v - 2 * 14 * ds, 0)))); // water drag
         else if (z === 6) nv = Math.max(14, Math.min(nv, Math.sqrt(Math.max(v * v - 2 * 6 * ds, 0))));
         else if (z === 5) {
           const target = j * ds > brake2 ? 3.2 : 7.5;
