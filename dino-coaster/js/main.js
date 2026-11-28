@@ -635,6 +635,7 @@ function loop(now) {
 
   // ---- fx ----
   app.fx.flash = Math.max(0, app.fx.flash - dt * 2.2);
+  if (app.fx.drops) { app.fx.drops = 0; splashDrops(); }
   if (app.fx.splat) { splat.paint(); splat.k = 1; splat.drip = 0; app.fx.splat = 0; splat.mesh.position.set((Math.random() - 0.5) * 0.12, (Math.random() - 0.5) * 0.06, -0.34); }
   if (splat.k > 0) {
     splat.k = Math.max(0, splat.k - dt * 0.38);

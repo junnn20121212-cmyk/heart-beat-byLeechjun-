@@ -95,6 +95,15 @@ export class Director {
     const T = this.track, s = name => T.sOf(name);
     const q = this.q;
     const tmp = new THREE.Vector3();
+    // the stretch where the track skims the river (ground under the rails is below water level)
+    {
+      let w0 = -1, w1 = -1;
+      for (let sc = s('dropBottom'); sc < s('lift2Start'); sc += 1) {
+        this.trackPoint(sc, 0, tmp);
+        if (this.ground(tmp.x, tmp.z) < -0.4) { if (w0 < 0) w0 = sc; w1 = sc; }
+      }
+      this.waterSpan = w0 > 0 ? [w0, w1] : [s('splash'), s('splash2')];
+    }
 
     // 1) Brachiosaurus herd near the lake (seen from station/lift)
     const brachs = q.high ? [[70, 58, 1.0], [28, 40, 0.85], [92, 112, 1.1]] : [[70, 58, 1.0], [28, 40, 0.85]];
@@ -124,7 +133,7 @@ export class Director {
 
     // 4) SPINOSAURUS rising from the river at the splash
     {
-      const sAt = (s('splash') + s('splash2')) / 2;
+      const sAt = this.waterSpan[1] - 4; // strikes at the end of the river, right after the mosasaurus
       const d = this.add('spino', 1.0);
       this.actors.push(this.riser(d, sAt, -6.5));
     }
@@ -207,6 +216,7 @@ export class Director {
     }
     this.buildNature();
     this.buildNewcomers();
+    this.buildHerds();
     this.buildLineup();
   }
 
@@ -278,6 +288,7 @@ export class Director {
     // 1) T-Rex feeding on a triceratops, seen from the top of the first drop
     {
       const food = this.openSpot(s('dropBottom') + 12, -34, 20);
+      this.feedSpot = food;
       this.carcass('trike2', food, 0.8, 1.0);
       const d = this.add('rex', 1.0);
       const hx = food.x + Math.sin(0.8 + 1.9) * 5.0, hz = food.z + Math.cos(0.8 + 1.9) * 5.0;
@@ -351,16 +362,10 @@ export class Director {
   // ---------- newcomers: Mosasaurus, Dilophosaurus, Pachycephalosaurus ----------
   buildNewcomers() {
     const T = this.track, s = n => T.sOf(n);
-    // Mosasaurus breaching in the lake (seen from lift 1, on the right)
+    // Mosasaurus: bursts out of the river the coaster skims and arcs right over the rider
     {
-      const d = this.add('mosa', 2.0);
-      const c = new THREE.Vector3(45, -14, 92);
-      d.place(c.x, c.y, c.z, -0.9);
-      this.actors.push(this.breacher(d, c, s('liftStart') + 85, s('liftTop') - 5));
-      // open a sight line from the upper lift to the lake
-      this.track.sample(s('liftStart') + 95, this._s);
-      const L = this._s.p;
-      for (let k = 0; k <= 1; k += 0.04) this.world.clearAround(L.x + (c.x - L.x) * k, L.z + (c.z - L.z) * k, 9);
+      const [w0, w1] = this.waterSpan;
+      this.actors.push(this.mosaLeap(this.add('mosa', 1.5), w0 + 2, Math.min(w1, w0 + 30)));
     }
     // Dilophosaurus in the middle of the helix, spitting at the cart as it circles
     {
@@ -418,6 +423,237 @@ export class Director {
         }
       },
     };
+  }
+
+  // rises out of the river ahead, arcs over the cart and dives back in behind it
+  mosaLeap(d, sDive, sRise) {
+    let state = 'wait', t = 0;
+    const A = new THREE.Vector3(), B = new THREE.Vector3(), wp = new THREE.Vector3();
+    this.trackPoint(sRise, 0, A, false); this.trackPoint(sDive, 0, B, false);
+    const sPeak = (sDive + sRise) / 2, DUR = 1.7;
+    d.place(0, -60, 0, Math.atan2(B.x - A.x, B.z - A.z));
+    return {
+      d,
+      update: (dt, st) => {
+        const ds = this.dsTo(sPeak, st.s);
+        if (state === 'wait') {
+          d.pos.y = -60; d.speed = 0;
+          // time it so the body is overhead just as the cart passes under
+          if (ds > 0 && ds < 120 && this.eta(sPeak - 3, st.s) < DUR / 2) { state = 'leap'; t = 0; d._a = d._b = d._c = false; }
+        } else if (state === 'leap') {
+          t += dt;
+          const k = clamp(t / DUR, 0, 1);
+          d.pos.lerpVectors(A, B, k);
+          d.pos.y = -9 + 18 * Math.sin(Math.PI * k);
+          d.heading = Math.atan2(B.x - A.x, B.z - A.z);
+          d.bodyPitch = lerp(-1.05, 1.05, k);
+          d.speed = 6; d.jawTarget = k < 0.6 ? 1 : 0.3;
+          d.look = null; d.lookW = 0;
+          this.focus = d.pos; this.tension = 1;
+          if (k > 0.1 && !d._a) {
+            d._a = true; wp.set(A.x, 0.2, A.z);
+            this.particles.burst(wp, 260, 'water', 13);
+            for (let i = 0; i < 6; i++) this.plume(wp.clone().add(new THREE.Vector3((Math.random() - 0.5) * 8, Math.random() * 3, (Math.random() - 0.5) * 8)), 6, 0xe8f0f2);
+            this.audio.splash(1.3);
+            this.audio.roar(d.headWorld(this._h), { pitch: 0.5, size: 2, dur: 2.2 });
+            this.say('강에서 모사사우루스가 튀어오른다!!');
+          }
+          if (k > 0.5 && !d._b) {
+            d._b = true;
+            this.fx.shake = Math.max(this.fx.shake, 0.7); this.fx.drops = 1;
+            this.particles.burst(st.cam.clone().add(new THREE.Vector3(0, 3, 0)), 160, 'water', 3);
+            this.audio.splash(0.9);
+            try { if (navigator.vibrate) navigator.vibrate([120, 60, 200]); } catch (e) { /* ignore */ }
+          }
+          if (k > 0.9 && !d._c) {
+            d._c = true; wp.set(B.x, 0.2, B.z);
+            this.particles.burst(wp, 320, 'water', 15);
+            for (let i = 0; i < 8; i++) this.plume(wp.clone().add(new THREE.Vector3((Math.random() - 0.5) * 12, Math.random() * 4, (Math.random() - 0.5) * 12)), 9, 0xe8f0f2);
+            this.audio.splash(1.4);
+            this.fx.shake = Math.max(this.fx.shake, 0.35);
+          }
+          if (k >= 1) { state = 'done'; d.bodyPitch = 0; d.pos.y = -60; }
+        } else if (state === 'done') {
+          d.pos.y = -60;
+          if (Math.abs(ds) > 300) state = 'wait';
+        }
+      },
+    };
+  }
+
+  // ---------- herds of the same species, each with its own habits ----------
+  buildHerds() {
+    const s = n => this.track.sOf(n), hi = this.q.high;
+    // Brachiosaurus: a migrating column, calves beside their mothers, stopping to browse treetops
+    {
+      const A = this.openSpot(s('liftStart') + 25, 36, 22), B = this.openSpot(s('liftTop') - 15, 36, 22);
+      this.herd('brachio', A, hi ? 3 : 2, hi ? 2 : 1, 'migrate', { A, B, s: (s('liftStart') + s('liftTop')) / 2 });
+    }
+    // Triceratops: defensive ring, adults facing outward with the young in the middle
+    this.herd('trike', this.openSpot(s('trike') + 70, 36, 20), hi ? 5 : 4, hi ? 3 : 2, 'ring', { key2: 'trike2', s: s('trike') + 70 });
+    // Stegosaurus: turn broadside and swing their spiked tails when the train comes near
+    this.herd('stego', this.openSpot(s('hill') + 12, 30, 18), hi ? 3 : 2, 1, 'tailswing', { s: s('hill') + 12 });
+    if (hi) this.herd('ankylo', this.openSpot(s('splash2') + 30, -30, 18), 2, 1, 'tailswing', { s: s('splash2') + 30 });
+    // Parasaurolophus: grazing herd that calls in a chorus through their crests
+    this.herd('parasaur', this.openSpot(s('lift2Start') - 15, -34, 20), hi ? 4 : 3, hi ? 2 : 1, 'chorus', { s: s('lift2Start') - 15 });
+    // Velociraptor: a resting pack with one sentinel on watch
+    this.herd('raptor', this.openSpot(s('trim') + 8, 22, 14), hi ? 4 : 3, 0, 'sentinel', { key2: 'raptor2', s: s('trim') + 8 });
+    // T-Rex juveniles playing around their mother's kill
+    if (this.feedSpot) {
+      const F = this.feedSpot;
+      for (let i = 0; i < (hi ? 2 : 1); i++) {
+        const d = this.add('rex', 0.4);
+        d.place(F.x + 4, F.y, F.z, 0);
+        let t = i * Math.PI, nipT = 1;
+        this.actors.push({ d, update: (dt, st) => {
+          t += dt; nipT -= dt;
+          const a = t * 0.9 + i * Math.PI;
+          this._v.set(F.x + Math.cos(a) * (5 + Math.sin(t * 1.7) * 1.5), 0, F.z + Math.sin(a) * (5 + Math.sin(t * 1.7) * 1.5));
+          this.moveToward(d, this._v, 5, dt, 6, 12);
+          d.jawTarget = Math.max(0, Math.sin(t * 6)) * 0.7;
+          if (nipT < 0 && d.pos.distanceTo(st.cam) < 70) { nipT = 2 + Math.random() * 2; this.audio.screech(d.headWorld(this._h), { pitch: 1.5, gain: 0.5 }); }
+        } });
+      }
+    }
+    // Pteranodon flock flying in a V
+    const n = hi ? 7 : 5;
+    this.flock = { t: 0, ps: [] };
+    for (let i = 0; i < n; i++) { const p = new Ptero(); p.root.scale.setScalar(1.2); this.scene.add(p.root); this.flock.ps.push(p); }
+  }
+
+  herd(key, c, nA, nJ, habit, o = {}) {
+    const G = { t: Math.random() * 10, c: c.clone(), habit, o, members: [], alertT: 0, callDone: -1 };
+    const total = nA + nJ;
+    for (let i = 0; i < total; i++) {
+      const juv = i >= nA;
+      const k = o.key2 && i % 2 ? o.key2 : key;
+      const d = this.add(k, juv ? 0.38 + Math.random() * 0.12 : 0.88 + Math.random() * 0.2);
+      const ang = (i / total) * Math.PI * 2;
+      const r = juv ? 2.5 : (habit === 'ring' ? 7.5 : 6 + Math.random() * 5);
+      const x = c.x + Math.cos(ang) * r, z = c.z + Math.sin(ang) * r;
+      d.place(x, this.ground(x, z), z, Math.random() * 6);
+      const m = { d, juv, i, ang, mom: juv ? G.members[(i - nA) % nA].d : null, phase: Math.random() * 6 };
+      G.members.push(m);
+      this.actors.push({ d, update: (dt, st) => this.herdTick(G, m, dt, st) });
+    }
+    // open meadow around the herd and a clear sightline to the nearest stretch of track
+    this.world.clearAround(c.x, c.z, 26);
+    // a fan of sightlines from the approaching stretch of track
+    if (o.s !== undefined) {
+      for (let ds = -70; ds <= 20; ds += 10) {
+        this.trackPoint(o.s + ds, 0, this._v);
+        const tx = this._v.x, tz = this._v.z;
+        const L = Math.hypot(c.x - tx, c.z - tz);
+        for (let k = 0.15; k <= 1; k += 7 / L) this.world.clearAround(tx + (c.x - tx) * k, tz + (c.z - tz) * k, 7);
+      }
+    }
+    if (habit === 'migrate') {
+      const { A, B } = o, L = A.distanceTo(B);
+      for (let k = 0; k <= 1; k += 6 / L) this.world.clearAround(A.x + (B.x - A.x) * k, A.z + (B.z - A.z) * k, 9);
+    }
+    return G;
+  }
+
+  herdTick(G, m, dt, st) {
+    const d = m.d, c = G.c;
+    if (m.i === 0) { G.t += dt; G.alertT -= dt; }
+    const dist = d.pos.distanceTo(st.cam);
+    if (dist < 65) G.alertT = 3;
+    const alert = G.alertT > 0;
+    const tgt = this._v;
+    d.chew = 0; d.extraYaw = 0; d.tailSwing = (d.tailSwing || 0) * 0.95;
+    switch (G.habit) {
+      case 'migrate': {
+        const { A, B } = G.o;
+        const browse = (G.t % 26) > 17;
+        if (m.i === 0 && !browse) G.u = (G.u || 0) + dt * 1.5 / A.distanceTo(B);
+        const u = 0.5 - 0.5 * Math.cos(Math.PI * (G.u || 0));
+        const dir = B.clone().sub(A).setY(0).normalize();
+        const back = Math.sin(Math.PI * (G.u || 0)) >= 0 ? 1 : -1; // walking A->B or B->A
+        const lead = A.clone().lerp(B, u);
+        if (m.juv) {
+          // calves trot beside their mother
+          tgt.copy(m.mom.pos).add(new THREE.Vector3(-dir.z, 0, dir.x).multiplyScalar(4.5));
+          this.moveToward(d, tgt, 2.6, dt, 2, 2);
+          if (Math.random() < dt * 0.05 && dist < 150) this.audio.bellow(d.headWorld(this._h), { pitch: 1.4, dur: 1, gain: 0.4 });
+        } else {
+          tgt.copy(lead).addScaledVector(dir, -back * m.i * 15);
+          this.moveToward(d, tgt, browse ? 0 : 1.9, dt, 1, 1);
+        }
+        if (browse && d.speed < 0.3) { d.headDip = m.juv ? 0.9 : -0.55; d.chew = 1; } // adults reach up into the canopy, calves graze
+        else d.headDip = 0;
+        if (browse && m.i === 0 && G.callDone !== Math.floor(G.t / 26) && dist < 200) { G.callDone = Math.floor(G.t / 26); this.audio.bellow(d.headWorld(this._h), { pitch: 0.42, dur: 3, gain: 0.8 }); d.roar(3); }
+        break;
+      }
+      case 'ring': {
+        if (m.juv) {
+          tgt.set(c.x + Math.cos(G.t * 0.3 + m.i * 2) * 2.5, 0, c.z + Math.sin(G.t * 0.3 + m.i * 2) * 2.5);
+          this.moveToward(d, tgt, 1, dt, 2, 2);
+          d.headDip = d.speed < 0.3 ? 0.9 : 0; d.chew = d.speed < 0.3 ? 1 : 0;
+        } else {
+          const nA = G.members.filter(x => !x.juv).length;
+          const a = (m.i / nA) * Math.PI * 2;
+          tgt.set(c.x + Math.cos(a) * 7.5, 0, c.z + Math.sin(a) * 7.5);
+          this.moveToward(d, tgt, 1.2, dt, 2, 2);
+          if (d.pos.distanceTo(tgt) < 1) d.heading = angleLerp(d.heading, Math.atan2(Math.cos(a), Math.sin(a)), dt * 2); // face outward
+          // on alert, horns down and stamping; otherwise take turns grazing
+          d.headDip = alert ? 0.4 + Math.sin(G.t * 6 + m.i) * 0.08 : (Math.sin(G.t * 0.5 + m.i * 1.3) > 0 ? 0.9 : 0.2);
+          d.chew = alert ? 0 : (d.headDip > 0.5 ? 1 : 0);
+          if (alert && m.i === 0 && G.callDone !== Math.floor(G.t / 5)) { G.callDone = Math.floor(G.t / 5); this.audio.bellow(d.headWorld(this._h), { pitch: 1.2, dur: 1.3, gain: 0.8 }); d.roar(1.3); }
+        }
+        break;
+      }
+      case 'tailswing': {
+        if (alert && !m.juv) {
+          // turn broadside to the threat and sweep the spiked tail
+          d.speed = Math.max(0, d.speed - dt * 3);
+          d.heading = angleLerp(d.heading, Math.atan2(st.cam.x - d.pos.x, st.cam.z - d.pos.z) + Math.PI / 2, dt * 1.5);
+          d.tailSwing = 1; d.headDip = 0.2;
+          if (m.i === 0 && G.callDone !== Math.floor(G.t / 4)) { G.callDone = Math.floor(G.t / 4); this.audio.bellow(d.headWorld(this._h), { pitch: 1.3, dur: 1.2, gain: 0.7 }); }
+        } else if (alert && m.juv) {
+          // the young hide behind the adults
+          tgt.copy(c).addScaledVector(c.clone().sub(st.cam).setY(0).normalize(), 6);
+          this.moveToward(d, tgt, 3, dt, 3, 4);
+        } else {
+          tgt.set(c.x + Math.cos(G.t * 0.07 + m.i * 2) * 8, 0, c.z + Math.sin(G.t * 0.07 + m.i * 2) * 8);
+          this.moveToward(d, tgt, m.juv ? 1.2 : 0.8, dt, 1, 1);
+          d.headDip = d.speed < 0.4 ? 0.9 : 0; d.chew = d.speed < 0.4 ? 1 : 0;
+        }
+        break;
+      }
+      case 'chorus': {
+        tgt.set(c.x + Math.cos(G.t * 0.08 + m.i * 1.6) * 9, 0, c.z + Math.sin(G.t * 0.08 + m.i * 1.6) * 9);
+        this.moveToward(d, tgt, m.juv ? 1.4 : 1, dt, 1, 1);
+        const cyc = G.t % 11, slot = m.i * 0.45;
+        const calling = cyc > slot && cyc < slot + 1.6;
+        d.headDip = calling ? -0.45 : (d.speed < 0.5 ? 1.5 : 0); // raise the crest to call, otherwise graze
+        d.chew = !calling && d.speed < 0.5 ? 1 : 0;
+        if (calling && m.lastCall !== Math.floor(G.t / 11) && dist < 160) {
+          m.lastCall = Math.floor(G.t / 11);
+          this.audio.bellow(d.headWorld(this._h), { pitch: (m.juv ? 2.8 : 1.9) + m.i * 0.12, dur: 1.4, gain: 0.6 });
+          d.jawTarget = 0.5;
+        }
+        break;
+      }
+      case 'sentinel': {
+        d.speed = 0;
+        if (m.i === 0) {
+          // the lookout stands tall and scans the forest
+          d.crouch = 0;
+          d.extraYaw = alert ? 0 : Math.sin(G.t * 0.7) * 0.9;
+          d.look = st.cam; d.lookW = alert ? 1 : 0;
+          if (alert && G.callDone !== Math.floor(G.t / 3)) { G.callDone = Math.floor(G.t / 3); this.audio.screech(d.headWorld(this._h), { pitch: 1.1, gain: 0.8 }); d.jawTarget = 1; }
+        } else {
+          // the others rest low until the alarm, then rise and stare
+          d.crouch += ((alert ? 0 : 1) - (d.crouch || 0)) * Math.min(1, dt * 3);
+          d.look = st.cam; d.lookW = alert ? 1 : 0;
+          d.headDip = alert ? 0 : 0.5;
+          d.tailSwing = alert ? 0 : 0.15;
+          if (alert) d.jawTarget = Math.max(0, Math.sin(G.t * 4 + m.i)) * 0.6;
+        }
+        break;
+      }
+    }
   }
 
   // circles with the cart, flares its frill and spits venom at the rider
@@ -1276,6 +1512,19 @@ export class Director {
       P.sp.scale.set(sz, sz * 0.8, 1);
       P.sp.position.y += dt * 1.2;
       P.sp.material.opacity = Math.sin(Math.PI * Math.min(1, k * 1.4)) * 0.55;
+    }
+    if (this.flock) {
+      const F = this.flock; F.t += dt;
+      const a = F.t * 0.05;
+      const lead = new THREE.Vector3(Math.cos(a) * 170, 58 + Math.sin(F.t * 0.3) * 4, Math.sin(a) * 140 + 60);
+      const fwd = new THREE.Vector3(-Math.sin(a) * 170, 0, Math.cos(a) * 140).normalize();
+      const side = new THREE.Vector3(-fwd.z, 0, fwd.x);
+      F.ps.forEach((p, i) => {
+        const row = Math.ceil(i / 2), sd = i % 2 ? 1 : -1;
+        p.root.position.copy(lead).addScaledVector(fwd, -row * 5).addScaledVector(side, sd * row * 4.5);
+        p.root.rotation.set(0, Math.atan2(fwd.x, fwd.z), -0.12);
+        p.update(dt, 0.6 + 0.4 * Math.sin(F.t * 0.5 + i));
+      });
     }
     // pteranodons
     for (const P of this.pteros) {

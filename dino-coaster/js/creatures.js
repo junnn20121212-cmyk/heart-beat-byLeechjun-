@@ -1043,7 +1043,7 @@ export class Dino {
     this.root.rotation.y = this.heading;
     const bob = spec.kind === 'biped' ? Math.cos(ph * 2) * 0.035 * Math.min(k, 1) * this.legLen : Math.cos(ph * 2) * 0.01 * Math.min(k, 1) * this.legLen;
     const breath = Math.sin(this.time * 1.6) * 0.012 * this.legLen;
-    this.pivot.position.y = this.hipHeight + bob + breath - Math.min(k, 1) * 0.04 * this.legLen;
+    this.pivot.position.y = this.hipHeight + bob + breath - Math.min(k, 1) * 0.04 * this.legLen - (this.crouch || 0) * 0.22 * this.hipHeight;
     const leanT = spec.kind === 'biped' ? Math.min(k, 1) * 0.12 : 0;
     this.lean += (leanT - this.lean) * Math.min(1, dt * 3);
     this.pivot.rotation.x = this.lean + this.bodyPitch;
@@ -1089,7 +1089,8 @@ export class Dino {
     this.tail.forEach((b, i) => {
       const w = (i + 1) / tn;
       b.rotation.y = Math.sin(this.time * (1.1 + k) - i * 0.7) * (0.05 + 0.03 * k) * w * 2 - Math.sin(ph - i * 0.4) * 0.05 * Math.min(k, 1) * w
-        + (spec.kind === 'swim' ? Math.sin(this.time * 2.4 - i * 0.8) * 0.12 * w : 0);
+        + (spec.kind === 'swim' ? Math.sin(this.time * 2.4 - i * 0.8) * 0.12 * w : 0)
+        + (this.tailSwing || 0) * Math.sin(this.time * 3.2 - i * 0.45) * 0.38 * w;
       b.rotation.x = Math.sin(this.time * 0.9 - i * 0.5) * 0.02 + (k > 0.5 ? -0.02 : 0.015 * w);
     });
     // look / neck
