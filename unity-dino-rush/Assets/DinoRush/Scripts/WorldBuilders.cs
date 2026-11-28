@@ -77,7 +77,7 @@ namespace DinoRush
         }
     }
 
-    // Jungle via GPU instancing (no prefabs needed), station and volcano
+    // Jungle (merged per map cell, no prefabs needed), station and volcano
     public class WorldExtras : MonoBehaviour
     {
         public RideController ride;
@@ -95,8 +95,6 @@ namespace DinoRush
             return false;
         }
 
-        class Batch { public Mesh mesh; public Material mat; public List<Matrix4x4[]> chunks = new List<Matrix4x4[]>(); public bool shadows; }
-        readonly List<Batch> batches = new List<Batch>();
         ParticleSystem smoke;
 
         float Ground(Vector3 p) => terrain ? terrain.SampleHeight(p) + terrain.transform.position.y : 0f;
@@ -195,11 +193,23 @@ namespace DinoRush
             return list;
         }
 
+        // merge the plants into one mesh per 120 m map cell: real objects, so they show in the
+        // Scene view as well as the Game view, and whole cells are culled when out of sight
         void AddBatch(Mesh mesh, Material mat, List<Matrix4x4> all, bool shadows)
         {
-            var b = new Batch { mesh = mesh, mat = mat, shadows = shadows };
-            for (int i = 0; i < all.Count; i += 1023) b.chunks.Add(all.GetRange(i, Mathf.Min(1023, all.Count - i)).ToArray());
-            batches.Add(b);
+            var cells = new Dictionary<Vector2Int, List<CombineInstance>>();
+            foreach (var m in all)
+            {
+                Vector3 p = m.GetColumn(3);
+                var key = new Vector2Int(Mathf.FloorToInt(p.x / 120f), Mathf.FloorToInt(p.z / 120f));
+                if (!cells.TryGetValue(key, out var list)) { list = new List<CombineInstance>(); cells[key] = list; }
+                list.Add(new CombineInstance { mesh = mesh, transform = m });
+            }
+            foreach (var kv in cells)
+            {
+                var go = MatUtil.MeshObject("Forest " + mesh.name + " " + kv.Key, MatUtil.Combine(kv.Value), mat, transform, shadows);
+                go.isStatic = true;
+            }
         }
 
         void BuildStation()
@@ -251,11 +261,5 @@ namespace DinoRush
             smoke.Play();
         }
 
-        void Update()
-        {
-            foreach (var b in batches)
-                foreach (var c in b.chunks)
-                    Graphics.DrawMeshInstanced(b.mesh, 0, b.mat, c, c.Length, null, b.shadows ? UnityEngine.Rendering.ShadowCastingMode.On : UnityEngine.Rendering.ShadowCastingMode.Off, true);
-        }
     }
 }
