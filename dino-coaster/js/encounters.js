@@ -206,6 +206,7 @@ export class Director {
       this.swoop = { p, sAt: T.sOf('liftStart') + 70, done: false, t: -1 };
     }
     this.buildNature();
+    this.buildNewcomers();
     this.buildLineup();
   }
 
@@ -345,6 +346,200 @@ export class Director {
       this.scene.add(p.root);
       this.fisher = { p, t: Math.random() * 10, c: new THREE.Vector3(45, 0, 92), splashed: false };
     }
+  }
+
+  // ---------- newcomers: Mosasaurus, Dilophosaurus, Pachycephalosaurus ----------
+  buildNewcomers() {
+    const T = this.track, s = n => T.sOf(n);
+    // Mosasaurus breaching in the lake (seen from lift 1, on the right)
+    {
+      const d = this.add('mosa', 2.0);
+      const c = new THREE.Vector3(45, -14, 92);
+      d.place(c.x, c.y, c.z, -0.9);
+      this.actors.push(this.breacher(d, c, s('liftStart') + 85, s('liftTop') - 5));
+      // open a sight line from the upper lift to the lake
+      this.track.sample(s('liftStart') + 95, this._s);
+      const L = this._s.p;
+      for (let k = 0; k <= 1; k += 0.04) this.world.clearAround(L.x + (c.x - L.x) * k, L.z + (c.z - L.z) * k, 9);
+    }
+    // Dilophosaurus in the middle of the helix, spitting at the cart as it circles
+    {
+      const x = -132, z = 172;
+      const d = this.add('dilo', 1.4);
+      d.place(x, this.ground(x, z), z, 0);
+      this.actors.push(this.spitter(d, s('helix0') - 20, s('helixOut') + 10));
+    }
+    // Pachycephalosaurus: a pair butting heads, and one that rams the cart on the brake run
+    {
+      const sAt = s('brake2') - 26;
+      const A = new THREE.Vector3(), B = new THREE.Vector3();
+      this.trackPoint(sAt - 10, 13, A); this.trackPoint(sAt - 10, 21, B);
+      const p1 = this.add('pachy', 1.0), p2 = this.add('pachy', 0.95);
+      this.actors.push(...this.buttPair(p1, p2, A, B));
+      this.actors.push(this.rammer(this.add('pachy', 1.1), sAt, -6));
+    }
+  }
+
+  // leaps out of the lake like a whale and crashes back with a huge splash
+  breacher(d, c, s0, s1) {
+    let state = 'under', t = 0, done = false;
+    const water = new THREE.Vector3(c.x, 0.2, c.z);
+    return {
+      d,
+      update: (dt, st) => {
+        const inWin = this.dsTo(s0, st.s) < 0 && this.dsTo(s1, st.s) > 0;
+        if (state === 'under') {
+          d.pos.y = -30; d.speed = 0;
+          if (inWin && !done) { state = 'breach'; t = 0; done = true; }
+          if (!inWin && Math.abs(this.dsTo(s0, st.s)) > 400) done = false;
+        } else if (state === 'breach') {
+          t += dt;
+          const k = clamp(t / 3.4, 0, 1);
+          // up out of the water nose-first, arc over, slam back down
+          d.pos.set(c.x + Math.sin(d.heading) * (k - 0.5) * 30, -24 + 40 * Math.sin(Math.PI * Math.min(1, k * 1.08)), c.z + Math.cos(d.heading) * (k - 0.5) * 30);
+          d.bodyPitch = lerp(-1.25, 1.1, k);
+          d.speed = 6; d.jawTarget = k < 0.55 ? 1 : 0.2;
+          if (t > 0.35 && !d._s1) {
+            d._s1 = true;
+            this.particles.burst(water, 300, 'water', 16);
+            for (let i = 0; i < 8; i++) this.plume(water.clone().add(new THREE.Vector3((Math.random() - 0.5) * 12, Math.random() * 4, (Math.random() - 0.5) * 12)), 9, 0xe8f0f2);
+            this.audio.splash(1.2);
+            this.audio.roar(water.clone().add(new THREE.Vector3(0, 8, 0)), { pitch: 0.5, size: 2, dur: 2.4 });
+            this.say('오른쪽 호수에서 모사사우루스가 솟구친다!');
+          }
+          if (k > 0.86 && !d._s2) {
+            d._s2 = true;
+            this.particles.burst(water, 380, 'water', 15);
+            for (let i = 0; i < 12; i++) this.plume(water.clone().add(new THREE.Vector3((Math.random() - 0.5) * 20, Math.random() * 6, (Math.random() - 0.5) * 20)), 13, 0xe8f0f2);
+            this.audio.splash(1.4);
+            this.fx.shake = Math.max(this.fx.shake, 0.25);
+          }
+          if (k >= 1) { state = 'under'; d._s1 = d._s2 = false; d.bodyPitch = 0; }
+        }
+      },
+    };
+  }
+
+  // circles with the cart, flares its frill and spits venom at the rider
+  spitter(d, s0, s1) {
+    let t = 0, spitT = 2.5, spits = 0;
+    const blobs = this.spitBlobs || (this.spitBlobs = []);
+    return {
+      d,
+      update: (dt, st) => {
+        t += dt;
+        const inWin = this.dsTo(s0, st.s) < 0 && this.dsTo(s1, st.s) > 0;
+        const dist = d.pos.distanceTo(st.cam);
+        d.speed = 0;
+        // keep facing the circling cart
+        d.heading = angleLerp(d.heading, Math.atan2(st.cam.x - d.pos.x, st.cam.z - d.pos.z), Math.min(1, dt * 2));
+        d.look = st.cam; d.lookW = inWin ? 1 : 0.3;
+        d.frillTarget = inWin && dist < 60 ? 1 : 0;
+        if (!inWin) { spits = 0; spitT = 2.5; return; }
+        spitT -= dt;
+        d.jawTarget = spitT < 0.6 ? 1 : 0.15;
+        if (spitT < 0.6 && spitT + dt >= 0.6) this.audio.screech(d.headWorld(this._h), { pitch: 1.6, gain: 0.9 });
+        if (spitT < 0 && spits < 3 && dist < 45) {
+          spits++; spitT = 3 + Math.random() * 1.5;
+          const from = d.headWorld(this._h).clone();
+          blobs.push({ from, t: 0, mesh: this.spitMesh(from) });
+          if (spits === 1) this.say('딜로포사우루스가 독침을 뱉는다!');
+        }
+      },
+    };
+  }
+
+  spitMesh(from) {
+    if (!this._spitMat) this._spitMat = new THREE.MeshStandardMaterial({ color: 0x9be22a, emissive: 0x335a08, roughness: 0.2, transparent: true, opacity: 0.85 });
+    const m = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8), this._spitMat);
+    m.position.copy(from);
+    this.scene.add(m);
+    return m;
+  }
+
+  // two males backing off and slamming domes together, over and over
+  buttPair(a, b, A, B) {
+    let t = Math.random() * 3;
+    const mid = A.clone().add(B).multiplyScalar(0.5);
+    const dir = B.clone().sub(A).setY(0).normalize();
+    const hA = Math.atan2(dir.x, dir.z), hB = Math.atan2(-dir.x, -dir.z);
+    a.place(A.x, A.y, A.z, hA); b.place(B.x, B.y, B.z, hB);
+    let hit = false;
+    const step = (d, sign, dt, st) => {
+      const cyc = t % 6;
+      let off; // distance from the middle
+      if (cyc < 2.2) off = lerp(1.6, 7, cyc / 2.2);            // back off
+      else if (cyc < 3.0) off = 7;                              // paw the ground
+      else if (cyc < 3.7) off = lerp(7, 1.15, (cyc - 3.0) / 0.7); // charge
+      else off = 1.15 + Math.min(0.8, (cyc - 3.7) * 1.5);       // recoil
+      const tgt = mid.clone().addScaledVector(dir, sign * off);
+      const prev = d.pos.clone();
+      d.pos.set(tgt.x, this.ground(tgt.x, tgt.z), tgt.z);
+      d.speed = prev.distanceTo(d.pos) / Math.max(dt, 1e-3);
+      d.heading = sign < 0 ? hA : hB;
+      d.headDip = cyc > 2.8 && cyc < 3.8 ? 0.6 : 0.1;   // head down for the charge
+      d.extraYaw = cyc > 3.7 && cyc < 4.6 ? Math.sin(t * 25) * 0.25 : 0; // dazed shake
+    };
+    return [
+      { d: a, update: (dt, st) => {
+        t += dt;
+        step(a, -1, dt, st);
+        const cyc = t % 6;
+        if (cyc > 3.68 && !hit) {
+          hit = true;
+          const dist = mid.distanceTo(st.cam);
+          if (dist < 120) { this.audio.thump(mid, 1.0); this.audio.clunk(); }
+          this.particles.burst(mid.clone().add(new THREE.Vector3(0, 1.2, 0)), 20, 'dust', 2);
+        }
+        if (cyc < 1) hit = false;
+      } },
+      { d: b, update: (dt, st) => step(b, 1, dt, st) },
+    ];
+  }
+
+  // charges in from the side of the brake run and head-butts the cart
+  rammer(d, sAt, lat) {
+    const home = new THREE.Vector3();
+    this.trackPoint(sAt + 4, lat * 2.2, home);
+    d.place(home.x, home.y, home.z, 0);
+    let state = 'wait', t = 0;
+    const tgt = new THREE.Vector3();
+    return {
+      d,
+      update: (dt, st) => {
+        const ds = this.dsTo(sAt, st.s);
+        if (state === 'wait') {
+          d.speed = 0; d.look = st.cam; d.lookW = ds < 40 && ds > -5 ? 1 : 0;
+          this.track.sample(st.s, this._s);
+          d.heading = Math.atan2(st.cam.x - d.pos.x, st.cam.z - d.pos.z);
+          if (ds < 11 && ds > 0) { state = 'charge'; t = 0; this.audio.bellow(d.headWorld(this._h), { pitch: 1.8, dur: 0.8, gain: 1 }); }
+        } else if (state === 'charge') {
+          t += dt;
+          // aim at the side of the cart just ahead of the rider
+          this.track.sample(st.s + 1.2, this._s);
+          tgt.copy(this._s.p).addScaledVector(this._s.r, Math.sign(lat) * 1.6);
+          this.moveToward(d, tgt, 10, dt, 8, 30);
+          d.headDip = 0.65; d.look = null; d.lookW = 0;
+          if (d.pos.distanceTo(tgt) < 1.0 || t > 2.5) {
+            state = 'dazed'; t = 0;
+            this.fx.shake = Math.max(this.fx.shake, 1.3); this.fx.wobble = 0.8;
+            this.fx.kick = (this.fx.kick || 0) - Math.sign(lat) * 1.6;
+            this.audio.crash(st.cam, 0.9); this.audio.clunk();
+            try { if (navigator.vibrate) navigator.vibrate([150, 40, 220]); } catch (e) { /* ignore */ }
+            this.say('쾅! 파키케팔로사우루스 박치기!');
+          }
+        } else if (state === 'dazed') {
+          // bounces off, stumbles back and shakes its head
+          t += dt;
+          d.speed = Math.max(0, 3 - t * 3);
+          d.pos.x -= Math.sin(d.heading) * d.speed * dt;
+          d.pos.z -= Math.cos(d.heading) * d.speed * dt;
+          d.pos.y = this.ground(d.pos.x, d.pos.z);
+          d.headDip = 0.2; d.extraYaw = Math.sin(t * 18) * 0.3 * Math.max(0, 1 - t / 2.5);
+          if (Math.abs(ds) > 250) { d.extraYaw = 0; d.headDip = 0; d.place(home.x, home.y, home.z, 0); state = 'wait'; }
+        }
+      },
+    };
   }
 
   drinker(d, water) {
@@ -993,9 +1188,10 @@ export class Director {
     };
   }
 
-  plume(p, size) {
+  plume(p, size, color = 0x9a8466) {
     const P = this.plumes[this.plumeI++ % this.plumes.length];
     P.life = 1; P.size = size;
+    P.sp.material.color.setHex(color);
     P.sp.position.set(p.x + (Math.random() - 0.5) * 2, p.y + 1, p.z + (Math.random() - 0.5) * 2);
     P.sp.visible = true;
   }
@@ -1053,6 +1249,23 @@ export class Director {
           this.audio.screech(new THREE.Vector3(st.cam.x + Math.cos(a) * r, st.cam.y - 4, st.cam.z + Math.sin(a) * r), { pitch: 0.75 + Math.random() * 0.4, gain: 0.55 });
         }
       } else if (ds0 > 50) K.said = false;
+    }
+    if (this.spitBlobs) for (let i = this.spitBlobs.length - 1; i >= 0; i--) {
+      const b = this.spitBlobs[i];
+      b.t += dt / 0.55;
+      const k = Math.min(1, b.t);
+      // lob toward the rider's face
+      b.mesh.position.lerpVectors(b.from, st.cam, k);
+      b.mesh.position.y += Math.sin(Math.PI * k) * 2;
+      if (k >= 1) {
+        this.scene.remove(b.mesh);
+        this.spitBlobs.splice(i, 1);
+        this.fx.splat = 1;
+        this.fx.shake = Math.max(this.fx.shake, 0.3);
+        this.audio.splash(0.35);
+        try { if (navigator.vibrate) navigator.vibrate(50); } catch (e) { /* ignore */ }
+        if (!this._splatSaid) { this._splatSaid = true; this.say('으악! 끈적한 독침!'); }
+      }
     }
     for (const P of this.plumes) {
       if (P.life <= 0) continue;

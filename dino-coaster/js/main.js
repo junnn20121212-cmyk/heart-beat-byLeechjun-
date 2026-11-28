@@ -111,6 +111,31 @@ function makeDust() {
   };
 }
 
+// ---------------- venom splat stuck on the rider's view (works in VR too) ----------------
+function makeSplat() {
+  const c = document.createElement('canvas'); c.width = 512; c.height = 320;
+  const tex = TX.toTexture(c);
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.31), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false, fog: false, toneMapped: false, opacity: 0 }));
+  mesh.renderOrder = 997;
+  mesh.visible = false;
+  const paint = () => {
+    const ctx = c.getContext('2d');
+    ctx.clearRect(0, 0, 512, 320);
+    const cx = 160 + Math.random() * 190, cy = 90 + Math.random() * 120;
+    for (let i = 0; i < 26; i++) {
+      const a = Math.random() * Math.PI * 2, r = Math.random() * 90, sz = 8 + Math.random() * 40 * (1 - r / 120);
+      const x = cx + Math.cos(a) * r, y = cy + Math.sin(a) * r * 0.7;
+      const g = ctx.createRadialGradient(x - sz * 0.3, y - sz * 0.3, 1, x, y, sz);
+      g.addColorStop(0, 'rgba(230,255,150,0.95)'); g.addColorStop(0.5, 'rgba(140,210,40,0.85)'); g.addColorStop(1, 'rgba(60,110,10,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(x, y, sz, sz * (0.8 + Math.random() * 0.5), a, 0, Math.PI * 2); ctx.fill();
+      if (Math.random() < 0.35) { ctx.fillStyle = 'rgba(120,190,30,0.75)'; ctx.fillRect(x - 2, y, 4 + Math.random() * 3, 20 + Math.random() * 60); } // drips
+    }
+    tex.needsUpdate = true;
+  };
+  mesh.position.set(0, 0, -0.34);
+  return { mesh, paint, k: 0, drip: 0 };
+}
+
 // ---------------- floating text sign (works in VR) ----------------
 class Billboard {
   constructor() {
@@ -127,7 +152,7 @@ class Billboard {
     ctx.clearRect(0, 0, 1024, 256);
     if (!text) { this.mesh.visible = false; this.tex.needsUpdate = true; return; }
     this.mesh.visible = true;
-    ctx.fillStyle = 'rgba(10,14,8,0.6)';
+    ctx.fillStyle = 'rgba(10,14,8,0.35)';
     ctx.beginPath(); ctx.roundRect(40, 30, 944, 196, 40); ctx.fill();
     ctx.fillStyle = '#ffd24a';
     ctx.font = 'bold 96px "Arial Black", sans-serif';
@@ -149,7 +174,7 @@ const app = {
   muted: false,
 };
 
-let riders, inertia, holdS, menuCam, dust, renderer, scene, camera, track, world, director, audio, stereo, gyro, particles, carts, billboard, headlight, lapS0;
+let splat, riders, inertia, holdS, menuCam, dust, renderer, scene, camera, track, world, director, audio, stereo, gyro, particles, carts, billboard, headlight, lapS0;
 const smp = { p: new THREE.Vector3(), t: new THREE.Vector3(), r: new THREE.Vector3(), u: new THREE.Vector3() };
 const smp2 = { p: new THREE.Vector3(), t: new THREE.Vector3(), r: new THREE.Vector3(), u: new THREE.Vector3() };
 
@@ -223,7 +248,12 @@ async function init() {
   headlight.target.position.set(0, -0.5, -20);
   carts.front.add(headlight, headlight.target);
   billboard = new Billboard();
-  billboard.mesh.position.set(0, 0.1, -2.6);
+  // subtle sign: smaller and below the line of sight so it does not dominate the view
+  billboard.mesh.position.set(0, -0.55, -2.6);
+  billboard.mesh.scale.setScalar(0.62);
+  billboard.mesh.material.opacity = 0.9;
+  splat = makeSplat();
+  camera.add(splat.mesh);
   camera.add(billboard.mesh);
 
   stereo = new StereoRenderer(renderer, Q.high);
@@ -352,7 +382,7 @@ function toast(t) {
   const el = $('toast');
   el.textContent = t;
   el.classList.add('show');
-  toastT = 2.6;
+  toastT = 1.9;
 }
 
 // ---------------- input ----------------
@@ -594,7 +624,7 @@ function loop(now) {
   } else if (smp.p.y > 3) app.splashed = false;
   for (const m of director.messages.splice(0)) {
     if (app.mode === 'normal') toast(m);
-    else if (app.state === 'ride') { billboard.set(m); app.msgT = 2.5; }
+    else if (app.state === 'ride') { billboard.set(m); app.msgT = 1.8; }
   }
   if (app.msgT > 0) { app.msgT -= dt; if (app.msgT <= 0 && app.state === 'ride') billboard.set(''); }
 
@@ -605,6 +635,14 @@ function loop(now) {
 
   // ---- fx ----
   app.fx.flash = Math.max(0, app.fx.flash - dt * 2.2);
+  if (app.fx.splat) { splat.paint(); splat.k = 1; splat.drip = 0; app.fx.splat = 0; splat.mesh.position.set((Math.random() - 0.5) * 0.12, (Math.random() - 0.5) * 0.06, -0.34); }
+  if (splat.k > 0) {
+    splat.k = Math.max(0, splat.k - dt * 0.38);
+    splat.drip += dt * 0.012;
+    splat.mesh.position.y -= dt * 0.012; // slowly slides down
+    splat.mesh.material.opacity = Math.min(1, splat.k * 1.6);
+    splat.mesh.visible = true;
+  } else splat.mesh.visible = false;
   if (app.state === 'end' && app.mode === 'vr' && app.endT > 7) app.fx.fade = Math.min(1, (app.endT - 7) / 2);
   $('flash').style.opacity = (app.fx.flash * 0.55).toFixed(3);
   $('fade').style.opacity = app.mode === 'normal' && app.state !== 'menu' ? app.fx.fade.toFixed(3) : 0;

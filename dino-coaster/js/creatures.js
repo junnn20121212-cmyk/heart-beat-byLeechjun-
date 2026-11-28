@@ -381,6 +381,74 @@ SPECIES.ankylo = {
   footH: 0.15, roarPitch: 1.3, roarSize: 0.8,
 };
 
+const scaleLeg = (L, k, rk = k) => ({
+  at: L.at.map(v => v * k), len: L.len.map(v => v * k), a: L.a,
+  thigh: L.thigh.map(([z, y, a, b, c]) => [z * k, y * k, a * rk, b * rk, c * rk]),
+  shin: L.shin.map(([z, y, a, b, c]) => [z * k, y * k, a * rk, b * rk, c * rk]),
+  meta: L.meta.map(([z, y, a, b, c]) => [z * k, y * k, a * rk, b * rk, c * rk]),
+  toe: { ...L.toe, len: L.toe.len * k, r: L.toe.r * rk, claw: L.toe.claw * k },
+});
+
+// Dilophosaurus: twin head crests and a neck frill it flares before spitting
+SPECIES.dilo = {
+  kind: 'biped', runSpeed: 9, bump: 0.04,
+  skin: { seed: 91, base: [150, 150, 96], dark: [58, 64, 40], belly: [212, 206, 172], spotAmt: 0.5, spotFreq: 22, stripeFreq: 20, stripeAmt: 0.3, accent: [196, 96, 42], accentAmt: 0.45, mottle: 0.6, wrinkle: 0.6 },
+  body: [
+    [-3.6, 0.25, 0.02, 0.02, 0.02], [-3.0, 0.25, 0.07, 0.08, 0.08], [-2.2, 0.2, 0.14, 0.16, 0.16], [-1.3, 0.12, 0.24, 0.27, 0.28],
+    [-0.4, 0.06, 0.33, 0.36, 0.42], [0.4, 0.03, 0.36, 0.38, 0.5], [1.1, 0.08, 0.32, 0.34, 0.46], [1.6, 0.3, 0.22, 0.24, 0.28],
+    [1.9, 0.65, 0.16, 0.17, 0.18], [2.05, 0.95, 0.14, 0.15, 0.15], [2.15, 1.15, 0.13, 0.13, 0.13],
+  ],
+  joints: { root: 5.2, tail: [4.0, 3.0, 2.0, 1.0], front: [6.6, 7.8, 8.7, 9.5, 10] },
+  neckFrom: 1, headPitch: 0.25,
+  skull: [[-0.15, 0.02, 0.11, 0.13, 0.11], [0.05, 0.05, 0.12, 0.13, 0.04], [0.28, 0.03, 0.09, 0.1, 0.035], [0.48, -0.01, 0.06, 0.07, 0.025], [0.6, -0.02, 0.03, 0.03, 0.015], [0.64, -0.02, 0.01, 0.01, 0.01]],
+  jaw: { at: [0, -0.02, -0.08], st: [[-0.08, -0.04, 0.1, 0.02, 0.07], [0.2, -0.02, 0.08, 0.02, 0.05], [0.45, -0.02, 0.05, 0.015, 0.03], [0.6, -0.02, 0.02, 0.01, 0.01]], open: 0.9 },
+  teeth: { up: [0.05, 0.58, 9, 0.04], low: [0.08, 0.56, 8, 0.035] },
+  eye: { z: 0.08, y: 0.07, r: 0.03, iris: [230, 190, 40] },
+  crests: { z0: -0.05, len: 0.5, h: 0.2 },
+  neckFrill: { r: 0.62 },
+  leg: scaleLeg(SPECIES.carno.leg, 0.75),
+  arm: { at: [0.3, -0.3, 1.2], len: [0.3, 0.26], r: 0.05, claws: 3, a: [-0.5, -0.8] },
+  roarPitch: 1.8, roarSize: 0.6, screech: true,
+};
+
+// Pachycephalosaurus: thick-domed head-butter
+SPECIES.pachy = {
+  kind: 'biped', runSpeed: 9, bump: 0.05,
+  skin: { seed: 101, base: [142, 112, 80], dark: [82, 58, 40], belly: [206, 186, 152], stripeFreq: 18, stripeAmt: 0.5, mottle: 0.6, wrinkle: 0.6 },
+  body: [
+    [-2.4, 0.15, 0.02, 0.02, 0.02], [-1.9, 0.15, 0.07, 0.08, 0.08], [-1.3, 0.12, 0.15, 0.17, 0.17], [-0.6, 0.08, 0.26, 0.28, 0.3],
+    [0.1, 0.05, 0.34, 0.34, 0.42], [0.7, 0.05, 0.34, 0.33, 0.44], [1.15, 0.15, 0.26, 0.26, 0.32], [1.45, 0.38, 0.17, 0.18, 0.18], [1.6, 0.55, 0.15, 0.15, 0.15],
+  ],
+  joints: { root: 3.9, tail: [2.9, 1.9, 1.0], front: [5.6, 6.8, 7.6, 8] },
+  neckFrom: 1, headPitch: 0.2,
+  skull: [[-0.12, 0.04, 0.13, 0.15, 0.13], [0.05, 0.06, 0.13, 0.15, 0.08], [0.22, 0.02, 0.1, 0.11, 0.06], [0.38, -0.03, 0.06, 0.06, 0.03], [0.45, -0.05, 0.02, 0.02, 0.02]],
+  jaw: { at: [0, -0.04, -0.05], st: [[-0.05, -0.04, 0.11, 0.02, 0.07], [0.2, -0.02, 0.08, 0.02, 0.04], [0.4, -0.03, 0.03, 0.01, 0.015]], open: 0.4 },
+  teeth: null, beak: true,
+  eye: { z: 0.1, y: 0.08, r: 0.028, iris: [170, 120, 50] },
+  dome: { r: 0.2, at: [0, 0.17, 0.0] },
+  leg: scaleLeg(SPECIES.raptor.leg, 1.25, 1.6),
+  arm: { at: [0.22, -0.2, 0.95], len: [0.16, 0.14], r: 0.035, claws: 3, a: [-0.4, -0.9] },
+  roarPitch: 1.7, roarSize: 0.6,
+};
+
+// Mosasaurus: giant marine reptile (no legs: flippers and a tail fluke)
+SPECIES.mosa = {
+  kind: 'swim', runSpeed: 8, bump: 0.03,
+  skin: { seed: 111, base: [70, 82, 92], dark: [36, 44, 52], belly: [206, 206, 196], spotAmt: 0.2, spotFreq: 30, stripeFreq: 10, stripeAmt: 0.1, mottle: 0.6, wrinkle: 0.5, rough: 0.45, backDark: 0.6 },
+  body: [
+    [-7, 0, 0.02, 0.05, 0.05], [-6, 0, 0.12, 0.3, 0.28], [-4.5, 0, 0.3, 0.5, 0.45], [-2.5, 0, 0.55, 0.65, 0.62],
+    [-0.5, 0, 0.78, 0.78, 0.8], [1.5, 0, 0.8, 0.78, 0.8], [3.2, 0.05, 0.62, 0.6, 0.62], [4.3, 0.1, 0.48, 0.48, 0.48], [5.0, 0.12, 0.42, 0.42, 0.42],
+  ],
+  joints: { root: 4.5, tail: [3.5, 2.5, 1.5, 0.7], front: [5.6, 6.6, 7.4, 8] },
+  neckFrom: 1, headPitch: 0.05,
+  skull: [[-0.3, 0.02, 0.4, 0.36, 0.3], [0.1, 0.06, 0.42, 0.36, 0.12], [0.7, 0.02, 0.3, 0.28, 0.09], [1.3, -0.03, 0.2, 0.2, 0.07], [1.8, -0.06, 0.12, 0.12, 0.05], [2.0, -0.07, 0.04, 0.04, 0.02]],
+  jaw: { at: [0, -0.06, -0.2], st: [[-0.2, -0.1, 0.38, 0.06, 0.25], [0.4, -0.04, 0.32, 0.05, 0.2], [1.1, -0.05, 0.22, 0.04, 0.12], [1.7, -0.06, 0.12, 0.03, 0.06], [2.0, -0.06, 0.04, 0.02, 0.02]], open: 0.8 },
+  teeth: { up: [0.15, 1.9, 14, 0.12], low: [0.2, 1.85, 13, 0.11] },
+  eye: { z: 0.25, y: 0.22, r: 0.06, iris: [200, 200, 120] },
+  flippers: [[0.75, 2.4, 1.5], [0.7, -1.4, 1.2]],
+  roarPitch: 0.5, roarSize: 1.8,
+};
+
 SPECIES.compy = { ...SPECIES.raptor, feathers: false, runSpeed: 9, skin: { seed: 81, base: [118, 124, 82], dark: [60, 66, 40], belly: [196, 190, 150], stripeFreq: 14, stripeAmt: 0.45, mottle: 0.6, wrinkle: 0.4 } };
 
 // ---------------- builder ----------------
@@ -567,6 +635,40 @@ export class Dino {
         head.add(m);
       }
     }
+    if (spec.crests) {
+      // two thin bony plates running along the top of the skull
+      const c = spec.crests;
+      const sh = new THREE.Shape();
+      sh.moveTo(0, 0);
+      sh.quadraticCurveTo(c.len * 0.35, c.h * 1.3, c.len, c.h * 0.15);
+      sh.lineTo(c.len, 0); sh.lineTo(0, 0);
+      const cm = new THREE.MeshStandardMaterial({ color: 0xb4502c, roughness: 0.6, side: THREE.DoubleSide });
+      for (const sd of [-1, 1]) {
+        const g = new THREE.ExtrudeGeometry(sh, { depth: 0.015, bevelEnabled: false });
+        g.rotateY(-Math.PI / 2);
+        const m = new THREE.Mesh(g, cm);
+        const top = atZ(spec.skull, c.z0 + c.len * 0.3);
+        m.position.set(sd * 0.045, top[1] + top[3] * 0.8, c.z0);
+        m.rotation.z = sd * 0.15;
+        head.add(m);
+      }
+    }
+    if (spec.dome) {
+      const D = spec.dome;
+      const dm = new THREE.Mesh(new THREE.SphereGeometry(D.r, 18, 12), new THREE.MeshStandardMaterial({ map: domeTexture(), roughness: 0.55 }));
+      dm.scale.set(1, 0.85, 1.15);
+      dm.position.set(...D.at);
+      head.add(dm);
+      const knobs = [];
+      for (let k = 0; k < 9; k++) {
+        const a = Math.PI * (0.55 + k / 8 * 0.9);
+        const g = coneGeo(0.025, 0.07, 5).translate(0, 0.035, 0);
+        g.rotateX(-Math.PI / 2 + 0.3); g.rotateY(a + Math.PI / 2);
+        g.translate(Math.cos(a) * D.r * 0.95, D.at[1] - D.r * 0.25, D.at[2] + Math.sin(a) * D.r * 1.05);
+        knobs.push(g);
+      }
+      head.add(new THREE.Mesh(mergeGeos(knobs), C.horn));
+    }
     if (spec.crest) {
       const g = coneGeo(0.08, 0.3, 6).scale(0.6, 1, 1.6);
       const m = new THREE.Mesh(g, headMat);
@@ -703,7 +805,7 @@ export class Dino {
           this.arms.push({ sh, el, a: A.a, side: sd });
         }
       }
-    } else {
+    } else if (spec.kind !== 'swim') {
       // quadruped
       const H = spec.H;
       const mk = (D, isFront) => {
@@ -743,6 +845,33 @@ export class Dino {
       }
       this.hipHeight = H - rootBone.userData.pos.y;
       this.legLen = H;
+    } else {
+      // swimmer: paddle flippers and a vertical tail fluke
+      this.flippers = [];
+      const fm = skinMaterial(key, spec.skin, 2, 2);
+      for (const [x, z, len] of spec.flippers) {
+        for (const sd of [-1, 1]) {
+          const pivot = new THREE.Group();
+          const b = atZ(st, z);
+          attach(z > rootBone.userData.pos.z ? this.chest : rootBone, pivot, new THREE.Vector3(sd * b[2] * 0.8, b[1] - b[4] * 0.4, z));
+          const g = loft([[0, 0, 0.18, 0.05, 0.05], [len * 0.5, 0, 0.32, 0.04, 0.04], [len, 0, 0.05, 0.02, 0.02]], { along: 8, around: 10, narrow: 0, uScale: 0.1, uOffset: 0.5 });
+          g.rotateY(sd * Math.PI / 2 + sd * -0.5); // sweep out and back
+          const m = new THREE.Mesh(g, fm);
+          pivot.add(m);
+          this.flippers.push({ pivot, sd, front: z > 0 });
+        }
+      }
+      const last = this.tail[this.tail.length - 1];
+      const fl = new THREE.Shape();
+      fl.moveTo(0, 0); fl.quadraticCurveTo(-0.6, 0.9, -1.2, 1.4); fl.quadraticCurveTo(-0.6, 0.4, -0.2, 0);
+      fl.quadraticCurveTo(-0.6, -0.3, -0.9, -0.8); fl.quadraticCurveTo(-0.3, -0.4, 0, 0);
+      const fg = new THREE.ExtrudeGeometry(fl, { depth: 0.08, bevelEnabled: false });
+      fg.translate(0, 0, -0.04); fg.rotateY(-Math.PI / 2);
+      const fluke = new THREE.Mesh(fg, fm);
+      const tz = st[0][0] + 0.5;
+      attach(last, fluke, new THREE.Vector3(0, atZ(st, tz)[1], tz));
+      this.hipHeight = 0;
+      this.legLen = 4;
     }
 
     // ---- sail / plates / spikes ----
@@ -856,6 +985,20 @@ export class Dino {
       attach(last, club, new THREE.Vector3(0, atZ(st, zc)[1], zc));
     }
 
+    if (spec.neckFrill) {
+      const nb = this.neck[0] || this.chest;
+      const g = new THREE.RingGeometry(0.1, spec.neckFrill.r, 28, 1);
+      const p = g.attributes.position;
+      for (let i = 0; i < p.count; i++) {
+        const x = p.getX(i), y = p.getY(i), r = Math.hypot(x, y);
+        if (r > 0.2) { const a = Math.atan2(y, x), k = 1 + 0.12 * Math.sin(a * 14); p.setXY(i, x * k, y * k); }
+      }
+      const fr = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ map: neckFrillTexture(), side: THREE.DoubleSide, roughness: 0.6, transparent: true, alphaTest: 0.3 }));
+      fr.position.set(0, 0.05, 0.15);
+      nb.add(fr);
+      this.frill = fr;
+      this.frillOpen = 0; this.frillTarget = 0;
+    }
     this.pivot.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
 
     // ---- state ----
@@ -932,11 +1075,21 @@ export class Dino {
       a.sh.rotation.x = a.a[0] + Math.sin(ph + (a.side > 0 ? 0 : Math.PI)) * 0.15 * Math.min(k, 1) + Math.sin(this.time * 1.3) * 0.05;
       a.el.rotation.x = a.a[1] + Math.sin(this.time * 1.7 + a.side) * 0.08;
     }
+    if (this.flippers) for (const f of this.flippers) {
+      f.pivot.rotation.z = f.sd * (0.25 + Math.sin(this.time * 2.2 + (f.front ? 0 : 1.5)) * 0.35);
+      f.pivot.rotation.x = Math.sin(this.time * 2.2 + (f.front ? 0 : 1.5)) * 0.25;
+    }
+    if (this.frill) {
+      this.frillOpen += ((this.frillTarget || 0) - this.frillOpen) * Math.min(1, dt * 6);
+      this.frill.scale.setScalar(0.12 + 0.88 * this.frillOpen);
+      this.frill.visible = this.frillOpen > 0.05;
+    }
     // tail sway
     const tn = this.tail.length;
     this.tail.forEach((b, i) => {
       const w = (i + 1) / tn;
-      b.rotation.y = Math.sin(this.time * (1.1 + k) - i * 0.7) * (0.05 + 0.03 * k) * w * 2 - Math.sin(ph - i * 0.4) * 0.05 * Math.min(k, 1) * w;
+      b.rotation.y = Math.sin(this.time * (1.1 + k) - i * 0.7) * (0.05 + 0.03 * k) * w * 2 - Math.sin(ph - i * 0.4) * 0.05 * Math.min(k, 1) * w
+        + (spec.kind === 'swim' ? Math.sin(this.time * 2.4 - i * 0.8) * 0.12 * w : 0);
       b.rotation.x = Math.sin(this.time * 0.9 - i * 0.5) * 0.02 + (k > 0.5 ? -0.02 : 0.015 * w);
     });
     // look / neck
@@ -1018,6 +1171,30 @@ function plateTexture() {
   for (let i = 0; i < 18; i++) { ctx.beginPath(); ctx.moveTo(64, 128); ctx.lineTo(i * 7.5, 0); ctx.stroke(); }
   _plateTex = TX.toTexture(c, { repeat: true });
   return _plateTex;
+}
+let _domeTex = null, _nfTex = null;
+function domeTexture() {
+  if (_domeTex) return _domeTex;
+  const c = document.createElement('canvas'); c.width = 128; c.height = 64;
+  const ctx = c.getContext('2d');
+  const g = ctx.createLinearGradient(0, 0, 0, 64);
+  g.addColorStop(0, '#e2d6b8'); g.addColorStop(0.5, '#b9a582'); g.addColorStop(1, '#7c6648');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, 128, 64);
+  for (let i = 0; i < 300; i++) { ctx.fillStyle = `rgba(60,40,20,${Math.random() * 0.2})`; ctx.fillRect(Math.random() * 128, Math.random() * 64, 2, 2); }
+  _domeTex = TX.toTexture(c);
+  return _domeTex;
+}
+function neckFrillTexture() {
+  if (_nfTex) return _nfTex;
+  const c = document.createElement('canvas'); c.width = 256; c.height = 256;
+  const ctx = c.getContext('2d');
+  const g = ctx.createRadialGradient(128, 128, 20, 128, 128, 128);
+  g.addColorStop(0, '#3a3a20'); g.addColorStop(0.35, '#d8b21e'); g.addColorStop(0.65, '#c2381c'); g.addColorStop(0.92, '#f0d040'); g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, 256, 256);
+  ctx.strokeStyle = 'rgba(40,20,10,0.55)'; ctx.lineWidth = 3;
+  for (let a = 0; a < Math.PI * 2; a += Math.PI / 14) { ctx.beginPath(); ctx.moveTo(128 + Math.cos(a) * 30, 128 + Math.sin(a) * 30); ctx.lineTo(128 + Math.cos(a) * 125, 128 + Math.sin(a) * 125); ctx.stroke(); }
+  _nfTex = TX.toTexture(c);
+  return _nfTex;
 }
 function frillTexture(skin) {
   const k = skin.seed;
