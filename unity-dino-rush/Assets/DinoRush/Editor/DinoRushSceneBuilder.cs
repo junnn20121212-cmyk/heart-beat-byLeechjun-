@@ -108,10 +108,10 @@ namespace DinoRush.EditorTools
             // floating sign for countdown / messages (visible in VR)
             var signGo = new GameObject("Sign");
             signGo.transform.SetParent(headPivot, false);
-            signGo.transform.localPosition = new Vector3(0, 0.1f, 2.6f);
+            signGo.transform.localPosition = new Vector3(0, -0.55f, 2.6f); // small subtitle below the line of sight
             var tm = signGo.AddComponent<TextMesh>();
             var font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            tm.font = font; tm.fontSize = 64; tm.characterSize = 0.012f; tm.anchor = TextAnchor.MiddleCenter; tm.alignment = TextAlignment.Center;
+            tm.font = font; tm.fontSize = 64; tm.characterSize = 0.0075f; tm.anchor = TextAnchor.MiddleCenter; tm.alignment = TextAlignment.Center;
             tm.color = new Color(1f, 0.82f, 0.29f); tm.text = "DINO RUSH";
             signGo.GetComponent<MeshRenderer>().sharedMaterial = font.material;
 
@@ -126,6 +126,14 @@ namespace DinoRush.EditorTools
             var dir = mgr.AddComponent<EncounterDirector>();
             dir.ride = ride; dir.audioDir = audioDir; dir.terrain = terrain;
             dir.transform.SetParent(world.transform);
+            mgr.AddComponent<FxPool>();
+            var fx = cam.gameObject.GetComponent<ScreenFX>();
+            if (!fx) fx = cam.gameObject.AddComponent<ScreenFX>();
+            ride.cam = cam; ride.screenFx = fx; ride.autoStart = false;
+            var cave = mgr.AddComponent<CaveBuilder>(); cave.ride = ride; cave.audioDir = audioDir;
+            var under = mgr.AddComponent<UnderwaterBuilder>(); under.ride = ride; under.terrain = terrain;
+            var extras = mgr.AddComponent<WorldExtras>(); extras.ride = ride; extras.terrain = terrain;
+            var title = mgr.AddComponent<TitleScreen>(); title.ride = ride; title.director = dir;
             // Cardboard helper lives in its own folder and needs the Cardboard package
             var cbType = AppDomain.CurrentDomain.GetAssemblies().Select(a => a.GetType("DinoRush.CardboardStartup")).FirstOrDefault(t => t != null);
             if (cbType != null) mgr.AddComponent(cbType);
@@ -138,7 +146,7 @@ namespace DinoRush.EditorTools
             EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
             AssetDatabase.SaveAssets();
             Selection.activeGameObject = mgr;
-            EditorUtility.DisplayDialog("DinoRush", "씬을 만들었어요!\n\n▶ Play 를 누르면 탑승이 시작돼요.\n에디터에서는 마우스 오른쪽 버튼 드래그로 둘러보고, R 키로 다시 출발해요.\n\n공룡 모델은 'DinoRush Managers' 의 Encounter Director > Species 에 넣으면 돼요.", "확인");
+            EditorUtility.DisplayDialog("DinoRush", "씬을 만들었어요! (숲, 동굴, 물속 석호, 역사, 화산, 공룡 연출 포함)\n\n타이틀 화면에서 클릭/스페이스로 탑승.\n화질을 낮추려면 Encounter Director / Cave / Underwater / World Extras 의 Low Quality 를 체크하세요.\n\n▶ Play → 타이틀에서 클릭.\n마우스 오른쪽 드래그: 둘러보기 · R: 정면 · Space: 다시 출발 · F: 속도감 시야 · G: 흔들림\n\n공룡 모델은 'DinoRush Managers' 의 Encounter Director > Species 에 넣으면 돼요.", "확인");
         }
 
         [MenuItem("DinoRush/2. 안드로이드 + 카드보드 설정 적용")]

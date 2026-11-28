@@ -30,6 +30,12 @@ namespace DinoRush
         public float restartDelay = 8f;
         public bool autoStart = true;
 
+        [Header("View settings (F / G keys toggle while playing)")]
+        public bool speedFov = true;      // widen the view with speed (PC only; VR lenses fix the FOV)
+        public bool shakeAndInertia = true;
+        public Camera cam;                 // rider camera
+        public ScreenFX screenFx;
+
         public TrackData Track { get; private set; }
         public float S { get; private set; }
         public float Speed { get; private set; }
@@ -43,7 +49,9 @@ namespace DinoRush
         string state = "idle";
         float dist, countdown, rideT, endT, holdT, vRel, slowT, msgT, holdS;
         string holdPhase = "";
-        bool launched, beeped, barDown, splashed;
+        bool launched, beeped, barDown, splashed, escape, boosted1, boosted2, wasUnder;
+        float baseFov = 70f, fovKick, fogDensity = -1f;
+        Color fogColor;
         float shake, wobble;
         // head inertia
         Vector3 hPos, hVel, prevVel, fSmooth;
@@ -60,6 +68,9 @@ namespace DinoRush
 
         void Start()
         {
+            if (!cam) cam = Camera.main;
+            if (cam) baseFov = cam.fieldOfView;
+            fogDensity = RenderSettings.fogDensity; fogColor = RenderSettings.fogColor;
             if (buildTrackMesh) TrackMeshBuilder.Build(Track, terrain, null);
             PlaceCart(S);
             if (autoStart) StartRide();
@@ -71,13 +82,17 @@ namespace DinoRush
         public void Wobble() { wobble = 1f; }
         public void Slow(float seconds = 0.55f) { slowT = seconds; }
         public void Say(string text, float seconds = 2.5f) { if (sign) { sign.text = text; msgT = seconds; } }
+        public void Alert(string title, string sub) { if (screenFx) screenFx.Alert(title, sub); else Say(title + "\n" + sub, 2.8f); }
+        public void Flash(float a) { if (screenFx) screenFx.Flash(a); }
+        public void FovKick(float deg) { fovKick = Mathf.Max(fovKick, deg); }
+        public bool Underwater { get; private set; }
 
         public void StartRide()
         {
             state = "countdown";
             countdown = countdownSeconds;
             dist = 0; S = Track.SOf("stationStop"); Speed = 0; rideT = 0;
-            holdPhase = ""; launched = false; beeped = false; barDown = false;
+            holdPhase = ""; launched = false; beeped = false; barDown = false; escape = boosted1 = boosted2 = false;
             firstVel = true; hPos = hVel = Vector3.zero; pitch = roll = vPitch = vRoll = 0;
             if (lapBar) lapBar.localRotation = Quaternion.Euler(-BarUp * Mathf.Rad2Deg, 0, 0);
             if (audioDir) audioDir.Announce();
@@ -103,7 +118,9 @@ namespace DinoRush
             PlaceCart(S);
             UpdateHead(dt, sm);
             if (msgT > 0) { msgT -= dt; if (msgT <= 0 && sign && state == "ride") sign.text = ""; }
-            if (audioDir) audioDir.UpdateRide(dt, Speed, sm.zone == Zone.Lift && state == "ride", Track.InRange(S, "tunnel"));
+            bool inTunnel = Track.InRange(S, "tunnel");
+            if (audioDir) audioDir.UpdateRide(dt, Speed, sm.zone == Zone.Lift && state == "ride", inTunnel);
+            UpdateView(dt, sm, inTunnel);
         }
 
         void UpdateCountdown(float dt)
@@ -156,10 +173,21 @@ namespace DinoRush
             }
             // impact jolt
             if (slowT > 0) { slowT -= dt; v *= 0.72f + 0.28f * (1 - Mathf.Max(0, slowT) / 0.55f); }
+            // emergency escape mode: armed inside the cave, fires the booster at the exit
+            if (!escape && Track.InRange(S, "tunnel") && S > Track.SOf("tunnelOut") - 26)
+            {
+                escape = true;
+                Alert("⚠ 긴급 탈출 모드 가동", "랩터를 따돌린다 · 부스터 충전 중");
+                if (audioDir) audioDir.Alarm();
+                Haptics.Buzz(new long[] { 0, 80, 80, 80, 80, 80 });
+            }
+            // mid-course boosters
+            if (!boosted1 && Track.InRange(S, "boost1")) { boosted1 = true; Boost("트리케라톱스 평원으로 돌진"); }
+            if (!boosted2 && Track.InRange(S, "boost2")) { boosted2 = true; Boost("마지막 탈출 가속"); }
             // launch kick
             if (sm.zone == Zone.Launch && !launched)
             {
-                launched = true; Shake(0.5f);
+                launched = true; Shake(0.5f); FovKick(10); Alert("부스터 점화!", "시속 119km");
                 if (audioDir) audioDir.Launch();
                 Haptics.Buzz(new long[] { 0, 300, 60, 500 });
             }
@@ -172,6 +200,52 @@ namespace DinoRush
             dist += v * dt;
             S = Track.Wrap(Track.SOf("stationStop") + dist);
             if (remain < 0.05f) { dist = Track.length; S = Track.SOf("stationStop"); state = "end"; endT = 0; Speed = 0; }
+        }
+
+        void Boost(string sub)
+        {
+            Alert("부스터!", sub);
+            Shake(0.45f); FovKick(8);
+            if (audioDir) audioDir.Launch();
+            Haptics.Buzz(new long[] { 0, 200, 40, 300 });
+        }
+
+        void UpdateView(float dt, TrackSample sm, bool inTunnel)
+        {
+            try
+            {
+                if (Input.GetKeyDown(KeyCode.F)) { speedFov = !speedFov; Say(speedFov ? "속도감 시야: 켜짐" : "속도감 시야: 꺼짐", 1.5f); }
+                if (Input.GetKeyDown(KeyCode.G)) { shakeAndInertia = !shakeAndInertia; Say(shakeAndInertia ? "흔들림·관성: 켜짐" : "흔들림·관성: 꺼짐", 1.5f); }
+            }
+            catch (System.InvalidOperationException) { /* new Input System only */ }
+            fovKick = Mathf.Max(0, fovKick - dt * 4);
+            bool xr = UnityEngine.XR.XRSettings.isDeviceActive;
+            if (cam && !xr)
+            {
+                float want = baseFov + (speedFov ? Mathf.Clamp((Speed - 12) * 0.5f, 0, 14) + fovKick : 0);
+                cam.fieldOfView = Mathf.Lerp(cam.fieldOfView, want, Mathf.Min(1, dt * 3));
+            }
+            // g / speed tunnel vision
+            float g = state == "ride" ? sm.gv : 1;
+            if (screenFx) screenFx.Vignette(Mathf.Clamp((g - 2.6f) * 0.35f, 0, 0.7f) + Mathf.Clamp((Speed - 22) / 30f, 0, 0.35f));
+            // under water: blue haze, short visibility, bubbles, muffled sound
+            Underwater = HeadPos.y < -0.05f;
+            if (fogDensity < 0) { fogDensity = RenderSettings.fogDensity; fogColor = RenderSettings.fogColor; }
+            if (Underwater)
+            {
+                RenderSettings.fogColor = new Color(0.05f, 0.24f, 0.28f);
+                RenderSettings.fogDensity = 0.03f;
+                if (Random.value < dt * 25) FxPool.Bubbles(HeadPos + Random.insideUnitSphere * 2 + Vector3.down * 1.5f, 1);
+            }
+            else if (inTunnel) { RenderSettings.fogColor = Color.Lerp(RenderSettings.fogColor, new Color(0.07f, 0.06f, 0.05f), dt * 3); RenderSettings.fogDensity = fogDensity; }
+            else { RenderSettings.fogColor = Color.Lerp(RenderSettings.fogColor, fogColor, dt * 3); RenderSettings.fogDensity = fogDensity; }
+            if (Underwater != wasUnder)
+            {
+                wasUnder = Underwater;
+                if (screenFx) { screenFx.SetUnder(Underwater); if (!Underwater) screenFx.Drops(); }
+                if (audioDir) audioDir.SetUnder(Underwater);
+                FxPool.Water(HeadPos + Vector3.down, 60, 4);
+            }
         }
 
         void PlaceCart(float s)
@@ -195,7 +269,7 @@ namespace DinoRush
             acc.y += 9.81f;
             fSmooth = Vector3.Lerp(fSmooth, acc, Mathf.Min(1, dt * 8));
             float fx = Vector3.Dot(fSmooth, sm.r), fy = Vector3.Dot(fSmooth, sm.u) - 9.81f, fz = Vector3.Dot(fSmooth, sm.t);
-            float k = inertiaStrength;
+            float k = inertiaStrength * (shakeAndInertia ? 1 : 0.15f);
             Vector3 target = new Vector3(
                 Mathf.Clamp(-fx * 0.006f, -0.12f, 0.12f),
                 Mathf.Clamp(-fy * 0.0045f, -0.08f, 0.1f),
@@ -211,7 +285,7 @@ namespace DinoRush
             shake = Mathf.Max(0, shake - dt * 1.6f);
             wobble = Mathf.Max(0, wobble - dt * 0.9f);
             float time = Time.time;
-            float sh = ((Speed / 30f) * 0.009f + (state == "ride" ? 0.0008f : 0) + shake * 0.06f) * shakeStrength;
+            float sh = ((Speed / 30f) * 0.009f + (state == "ride" ? 0.0008f : 0) + shake * 0.06f) * shakeStrength * (shakeAndInertia ? 1 : 0.25f);
             float wb = wobble * wobble;
             float ex = Mathf.Sin(time * 41) * sh + Mathf.Sin(time * 23.7f) * sh * 0.6f + Mathf.Sin(time * 11) * 0.05f * wb;
             float ey = Mathf.Sin(time * 37.3f) * sh * 0.7f + Mathf.Sin(time * 7) * 0.04f * wb;
@@ -234,7 +308,7 @@ namespace DinoRush
 
         void OnGUI()
         {
-            GUI.Label(new Rect(10, 10, 400, 22), $"{state}  {Speed * 3.6f:0} km/h   s={S:0}   (Space: 다시 출발, 마우스 오른쪽 드래그: 둘러보기, R: 정면)");
+            GUI.Label(new Rect(10, 10, 400, 22), $"{state}  {Speed * 3.6f:0} km/h   s={S:0}   (Space 다시 출발 · 오른쪽 드래그 둘러보기 · R 정면 · F 속도감 · G 흔들림)");
             if (Event.current.type == EventType.KeyDown && Event.current.keyCode == KeyCode.Space) StartRide();
         }
 #endif

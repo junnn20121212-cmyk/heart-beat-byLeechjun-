@@ -175,6 +175,9 @@ export class Track {
       lift2: [s('surface') - 6, s('lift2Top') + 2], // the chain hauls the cart out of the lagoon
       drive: [s('helixOut') + 10, s('tunnelOut')],
       launch: [s('tunnelOut'), s('tunnelOut') + 50],
+      // short mid-course boosters: sudden kicks of speed
+      boost1: [s('trike') - 34, s('trike') - 14],
+      boost2: [s('finalRex') + 4, s('finalRex') + 22],
       roll: [s('tunnelOut') + 56, s('tunnelOut') + 100],
       roll2: [s('raptor1') + 4, s('raptor1') + 36],
       water: [s('splash') + 6, s('splash2') + 4],
@@ -190,6 +193,8 @@ export class Track {
     mark(r.lift2[0], r.lift2[1], 2);
     mark(r.drive[0], r.drive[1], 3);
     mark(r.launch[0], r.launch[1], 4);
+    mark(r.boost1[0], r.boost1[1], 8);
+    mark(r.boost2[0], r.boost2[1], 8);
     mark(r.trim[0], r.trim[1], 6);
     mark(r.water[0], r.water[1], 7);
   }
@@ -214,6 +219,7 @@ export class Track {
         }
         else if (z === 3) nv = 16;
         else if (z === 4) nv = Math.min(33, Math.sqrt(v * v + 2 * 15 * ds));
+        else if (z === 8) nv = Math.max(nv, Math.min(31, Math.sqrt(v * v + 2 * 16 * ds))); // booster
         else if (z === 7) nv = Math.max(12, Math.min(nv, Math.sqrt(Math.max(v * v - 2 * 14 * ds, 0)))); // water drag
         else if (z === 6) nv = Math.max(14, Math.min(nv, Math.sqrt(Math.max(v * v - 2 * 6 * ds, 0))));
         else if (z === 5) {

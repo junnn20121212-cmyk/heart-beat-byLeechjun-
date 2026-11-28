@@ -20,7 +20,7 @@ namespace DinoRush
         [Range(0, 1)] public float volume = 0.9f;
 
         AudioSource wind, rails, jungle, ui;
-        AudioClip sRoar, sScreech, sBellow, sCrash, sClick, sClunk, sThump, sHiss, sBeep, sLaunch, sSplash;
+        AudioClip sAlarm, sDrip, sRoar, sScreech, sBellow, sCrash, sClick, sClunk, sThump, sHiss, sBeep, sLaunch, sSplash;
         float chainDist;
         const int SR = 44100;
 
@@ -30,6 +30,7 @@ namespace DinoRush
             sCrash = Synth.Crash(SR); sClick = Synth.Click(SR, 1900); sClunk = Synth.Clunk(SR);
             sThump = Synth.Thump(SR); sHiss = Synth.Hiss(SR); sBeep = Synth.Beep(SR);
             sLaunch = Synth.Launch(SR); sSplash = Synth.Splash(SR);
+            sAlarm = Synth.Alarm(SR); sDrip = Synth.Click(SR, 3600);
             wind = Loop(windLoop ? windLoop : Synth.NoiseLoop(SR, 500f, 0.6f, false), 0f);
             rails = Loop(railLoop ? railLoop : Synth.NoiseLoop(SR, 140f, 0.7f, true), 0f);
             jungle = Loop(jungleLoop ? jungleLoop : Synth.NoiseLoop(SR, 5200f, 8f, false), 0.03f);
@@ -63,6 +64,24 @@ namespace DinoRush
 
         // ---------- events ----------
         public void Announce() { if (announcement) Ui(announcement); }
+        public void Alarm() => Ui(sAlarm, 0.6f);
+        public void Drip(Vector3 pos) => At(sDrip, pos, 0.25f * volume, 3, 0.9f + Random.value * 0.4f);
+        public void Squeak(Vector3 pos) => At(sDrip, pos, 0.35f * volume, 4, 1.7f + Random.value * 0.4f);
+
+        // muffle everything while the rider's head is under water
+        AudioLowPassFilter muffle;
+        public void SetUnder(bool on)
+        {
+            if (!muffle)
+            {
+                var l = FindObjectOfType<AudioListener>();
+                if (!l) return;
+                muffle = l.GetComponent<AudioLowPassFilter>();
+                if (!muffle) muffle = l.gameObject.AddComponent<AudioLowPassFilter>();
+            }
+            muffle.cutoffFrequency = on ? 520f : 22000f;
+            Splash();
+        }
         public void Clunk() => Ui(sClunk, 0.8f);
         public void Beep() => Ui(sBeep, 0.5f);
         public void Hiss() => Ui(sHiss, 0.6f);
@@ -262,6 +281,17 @@ namespace DinoRush
                 d[i] = lp.Run(N()) * Mathf.Exp(-t * 3);
             }
             return Make("splash", d, sr);
+        }
+
+        public static AudioClip Alarm(int sr)
+        {
+            int n = (int)(1.7f * sr); var d = new float[n]; var lp = Biquad.LowPass(2200, 0.7f, sr);
+            for (int i = 0; i < n; i++)
+            {
+                float t = (float)i / sr; float f = ((int)(t / 0.28f)) % 2 == 0 ? 860 : 620;
+                d[i] = lp.Run(Mathf.Sign(Mathf.Sin(2 * Mathf.PI * f * t))) * (t > 1.6f ? Mathf.Max(0, 1 - (t - 1.6f) * 10) : 1);
+            }
+            return Make("alarm", d, sr);
         }
 
         public static AudioClip NoiseLoop(int sr, float f, float q, bool brown)

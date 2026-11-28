@@ -382,7 +382,7 @@ async function startRide(mode) {
   gyro.recenter();
   app.yaw = 0; app.pitch = 0;
   app.dist = 0; app.s = lapS0; app.v = 0; app.rideT = 0;
-  app.holdPhase = null; app.launched = false; app.fovKick = 0; app.escape = false;
+  app.holdPhase = null; app.launched = false; app.fovKick = 0; app.escape = false; app.boosted = {};
   app.cdTotal = app.countdown; app.barsDown = 0; app.beeped = false; app.wasRoll = false; app.excite = 0;
   setBars(1); inertia.reset();
   audio.announce('다이노 러시에 오신 것을 환영합니다. 안전바를 끝까지 내려 주세요. 공룡에게 손을 흔들지 마세요. 출발합니다!');
@@ -546,6 +546,14 @@ function loop(now) {
       buzz([80, 80, 80, 80, 80], true);
     }
     // launch kick
+    // mid-course boosters
+    for (const key of ['boost1', 'boost2']) {
+      if (track.inRange(app.s, key) && !app.boosted[key]) {
+        app.boosted[key] = true;
+        alertBanner('부스터!', key === 'boost1' ? '트리케라톱스 평원으로 돌진' : '마지막 탈출 가속');
+        audio.launch(); app.fx.shake = Math.max(app.fx.shake, 0.45); app.fovKick = 8; buzz([200, 40, 300], true);
+      }
+    }
     if (smp.zone === 4 && !app.launched) { app.launched = true; alertBanner('부스터 점화!', '시속 119km');  audio.launch(); app.fx.shake = Math.max(app.fx.shake, 0.5); app.fovKick = 10; buzz([300, 60, 500], true); screamT = 0; screams(3, { rise: 1.5 }); }
     const remain = track.length - app.dist;
     if (remain < 6) v = Math.max(0.25, Math.min(v, remain * 0.6));

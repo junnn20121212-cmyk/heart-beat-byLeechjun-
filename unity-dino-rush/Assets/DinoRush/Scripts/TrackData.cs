@@ -10,7 +10,7 @@ namespace DinoRush
     [Serializable] public class TrackPointJson { public string name; public float x, y, z; }
     [Serializable] public class TrackJson { public TrackPointJson[] points; }
 
-    public enum Zone : byte { Free = 0, Station = 1, Lift = 2, Drive = 3, Launch = 4, Brake = 5, Trim = 6, Water = 7 }
+    public enum Zone : byte { Free = 0, Station = 1, Lift = 2, Drive = 3, Launch = 4, Brake = 5, Trim = 6, Water = 7, Boost = 8 }
 
     public struct TrackSample
     {
@@ -130,6 +130,8 @@ namespace DinoRush
             SetRange("drive", SOf("helixOut") + 10, SOf("tunnelOut"));
             SetRange("launch", SOf("tunnelOut"), SOf("tunnelOut") + 50);
             SetRange("roll", SOf("tunnelOut") + 56, SOf("tunnelOut") + 100);
+            SetRange("boost1", SOf("trike") - 34, SOf("trike") - 14);
+            SetRange("boost2", SOf("finalRex") + 4, SOf("finalRex") + 22);
             SetRange("roll2", SOf("raptor1") + 4, SOf("raptor1") + 36);
             SetRange("water", SOf("splash") + 6, SOf("splash2") + 4);
             SetRange("trim", SOf("trim") - 22, SOf("trim") - 6);
@@ -142,6 +144,8 @@ namespace DinoRush
             Mark(ranges["lift2"], Zone.Lift);
             Mark(ranges["drive"], Zone.Drive);
             Mark(ranges["launch"], Zone.Launch);
+            Mark(ranges["boost1"], Zone.Boost);
+            Mark(ranges["boost2"], Zone.Boost);
             Mark(ranges["trim"], Zone.Trim);
             Mark(ranges["water"], Zone.Water);
         }
@@ -173,6 +177,7 @@ namespace DinoRush
                         case Zone.Lift: nv = Mathf.Max(5.2f, Mathf.Sqrt(Mathf.Max(v2 - 2 * 2.4f * ds, 0))); break;
                         case Zone.Drive: nv = 16f; break;
                         case Zone.Launch: nv = Mathf.Min(33f, Mathf.Sqrt(v * v + 2 * 15f * ds)); break;
+                        case Zone.Boost: nv = Mathf.Max(nv, Mathf.Min(31f, Mathf.Sqrt(v * v + 2 * 16f * ds))); break;
                         case Zone.Water: nv = Mathf.Max(12f, Mathf.Min(nv, Mathf.Sqrt(Mathf.Max(v * v - 2 * 14f * ds, 0)))); break;
                         case Zone.Trim: nv = Mathf.Max(14f, Mathf.Min(nv, Mathf.Sqrt(Mathf.Max(v * v - 2 * 6f * ds, 0)))); break;
                         case Zone.Brake:
